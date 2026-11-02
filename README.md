@@ -40,10 +40,54 @@ node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js \
 npm run dev               # http://127.0.0.1:5173，本地会模拟登录 seedy@sites.test
 ```
 
-## 发布
+## 双目标架构
+
+同一份代码两个运行目标，靠 `LS_TARGET` 切换（构建期决定平台实现，见 `next.config.ts` 的别名）：
+
+| | Cloudflare 托管（默认） | 自托管（`LS_TARGET=node`） |
+| --- | --- | --- |
+| 运行时 | Cloudflare Workers（Vinext） | Node 22 + Next standalone，Docker 容器 |
+| 数据库 | D1 | SQLite（`node:sqlite` 内置驱动，零原生依赖） |
+| 文件 | R2 | 本地磁盘（`LS_FILES_PATH`） |
+| 登录 | Sign in with ChatGPT（平台闸门） | 家庭邀请码 + 密码，会话 cookie（`middleware.ts` 307 拦截） |
+
+平台差异都收敛在 `lib/platform/`：`db-*`、`storage-*` 两套实现 + `target.ts` / `guard.ts` / `auth-node.ts`。
+
+## 发布（Cloudflare 托管）
 
 按 Sites 插件的流程：`site-workflow.mjs` 打包推送，然后
 `save_version_and_deploy_private`（私密站点）。线上会在部署前自动应用 D1 迁移。
+
+## 自托管（Docker）
+
+```sh
+# 本地构建（构建层直接用仓库里的 node_modules，容器内不联网）
+docker build -t little-steps:v1 .
+
+# 运行：数据全部落在挂载卷里
+docker run -d --name little-steps --restart unless-stopped \
+  -p 127.0.0.1:3100:3100 \
+  -v /srv/little-steps/data:/data \
+  little-steps:v1
+```
+
+- 容器启动时自动应用 `drizzle/` 里的迁移；**首次启动会在日志里打印一个引导邀请码**：
+  `docker logs little-steps`。打开 `/login` 用它创建第一个家庭账号（称呼 + 密码）。
+- 之后在「设置」页可以生成新的邀请码发给家人；每位家人一个账号，记录上显示各自称呼。
+- 反向代理（Caddy）：
+
+  ```caddy
+  ruochuan.42tr.cn {
+      reverse_proxy 127.0.0.1:3100
+  }
+  ```
+
+  容器只监听回环地址，TLS 交给 Caddy；`x-forwarded-proto: https` 时会启用 Secure cookie。
+
+- **备份**：整个 `/srv/little-steps/data` 目录（`app.db*` + `files/`）拷走即可；文字记录还可以用 `/api/export` 导 JSON。
+- **更新**：本地 `docker build` 出新 tag → 推到镜像仓库或 `docker save | ssh host docker load` →
+  用新镜像重建容器。数据在卷里，不丢。
+- 镜像仓库：`crpi-gz6f3ok0ezphywc8.cn-shanghai.personal.cr.aliyuncs.com/42tr/little-steps:<tag>`
 
 ## 数据备份
 
