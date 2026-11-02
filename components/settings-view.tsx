@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Check, Download, Pencil, Trash2, UserRound } from "lucide-react";
+import { Camera, Check, Download, Pencil, Plus, Trash2, UserRound, Users } from "lucide-react";
 import { OnboardingCard } from "@/components/onboarding";
 import { Btn, Field, SelectField, TextArea, TextField } from "@/components/controls";
 import { ConfirmDialog } from "@/components/modal";
@@ -21,16 +21,22 @@ export type MemberInfo = {
   platformName: string | null;
 };
 
+export type PendingInvite = { code: string; label: string; createdAt: string };
+
 export function SettingsView({
   kids,
   currentChildId,
   member,
   storage,
+  nodeMode = false,
+  pendingInvites = [],
 }: {
   kids: Child[];
   currentChildId: number | null;
   member: MemberInfo;
   storage: { files: number; bytes: number };
+  nodeMode?: boolean;
+  pendingInvites?: PendingInvite[];
 }) {
   const router = useRouter();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -102,6 +108,8 @@ export function SettingsView({
       </section>
 
       <OnboardingCard compact />
+
+      {nodeMode && <FamilyAccessSection initialInvites={pendingInvites} onNotice={setNotice} />}
 
       {/* ===== 我的称呼 ===== */}
       <section className="scrap-card p-4 sm:p-5">
@@ -421,5 +429,179 @@ function MemberForm({ member, onSaved }: { member: MemberInfo; onSaved: () => vo
       </Btn>
       {error && <p className="text-[13px] text-[#b34433] sm:col-span-3">{error}</p>}
     </div>
+  );
+}
+
+function FamilyAccessSection({
+  initialInvites,
+  onNotice,
+}: {
+  initialInvites: PendingInvite[];
+  onNotice: (msg: string) => void;
+}) {
+  const router = useRouter();
+  const [invites, setInvites] = useState(initialInvites);
+  const [label, setLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [justCreated, setJustCreated] = useState<string | null>(null);
+  const [pwd, setPwd] = useState({ current: "", next: "", confirm: "" });
+  const [pwdBusy, setPwdBusy] = useState(false);
+  const [pwdError, setPwdError] = useState<string | null>(null);
+
+  async function createInvite() {
+    setBusy(true);
+    const res = await fetch("/api/auth/invite", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: label.trim() || "家人" }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { code?: string; error?: string };
+    setBusy(false);
+    if (!res.ok || !body.code) {
+      onNotice(body.error ?? "没能生成邀请码");
+      return;
+    }
+    setInvites((prev) => [
+      { code: body.code!, label: label.trim() || "家人", createdAt: new Date().toISOString() },
+      ...prev,
+    ]);
+    setJustCreated(body.code);
+    setLabel("");
+    onNotice("邀请码已生成，发给家人即可");
+  }
+
+  async function copy(code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      onNotice(`已复制 ${code}`);
+    } catch {
+      setJustCreated(code);
+    }
+  }
+
+  async function changePassword() {
+    setPwdError(null);
+    if (pwd.next.length < 6) {
+      setPwdError("新密码至少 6 位");
+      return;
+    }
+    if (pwd.next !== pwd.confirm) {
+      setPwdError("两次输入的新密码不一样");
+      return;
+    }
+    setPwdBusy(true);
+    const res = await fetch("/api/auth/passwd", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ current: pwd.current, next: pwd.next }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    setPwdBusy(false);
+    if (!res.ok) {
+      setPwdError(body.error ?? "没能修改");
+      return;
+    }
+    setPwd({ current: "", next: "", confirm: "" });
+    onNotice("密码已更新");
+  }
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  }
+
+  return (
+    <section className="scrap-card p-4 sm:p-5">
+      <h2 className="font-display mb-1 flex items-center gap-2 text-base font-bold text-ink">
+        <Users className="h-4 w-4 text-terracotta" />
+        家人与邀请
+      </h2>
+      <p className="mb-4 text-[12.5px] leading-relaxed text-ink-soft">
+        账号没有数量限制，一位家人一个账号。<strong className="font-medium text-ink">邀请码是一次性的</strong>：
+        把码发给家人，TA 在登录页输入码 + 自己的称呼 + 密码就注册好了；码用过即失效。
+      </p>
+
+      <div className="rounded-2xl border border-line bg-paper/70 p-3.5">
+        <div className="flex flex-wrap items-end gap-2.5">
+          <TextField
+            label="TA 的称呼（选填）"
+            placeholder="例如 爸爸 / 外婆"
+            value={label}
+            maxLength={24}
+            onChange={(e) => setLabel(e.target.value)}
+            className="w-[180px]"
+          />
+          <Btn onClick={createInvite} disabled={busy} icon={<Plus className="h-4 w-4" />}>
+            {busy ? "生成中…" : "生成邀请码"}
+          </Btn>
+        </div>
+
+        {justCreated && (
+          <div className="animate-ls-pop mt-3 flex flex-wrap items-center gap-2.5 rounded-xl border border-sage/40 bg-[#f2f7f1] px-3 py-2.5">
+            <span className="text-[12.5px] text-[#4d7357]">新码（发给家人）：</span>
+            <code className="font-display rounded-lg bg-paper px-2.5 py-1 text-base font-bold tracking-widest text-ink">
+              {justCreated}
+            </code>
+            <Btn variant="outline" size="sm" onClick={() => copy(justCreated)}>
+              复制
+            </Btn>
+            <button type="button" className="text-[11px] text-ink-soft underline decoration-dotted" onClick={() => setJustCreated(null)}>
+              收起
+            </button>
+          </div>
+        )}
+
+        {invites.length > 0 && (
+          <ul className="mt-3 space-y-1.5">
+            {invites.map((inv) => (
+              <li key={inv.code} className="flex items-center gap-2.5 rounded-xl bg-cream-deep/50 px-3 py-2">
+                <code className="font-display text-[14px] font-bold tracking-widest text-ink">{inv.code}</code>
+                <span className="text-[11.5px] text-ink-soft">给 {inv.label} · 还没用</span>
+                <button
+                  type="button"
+                  onClick={() => copy(inv.code)}
+                  className="ml-auto rounded-full px-2 py-0.5 text-[11.5px] text-ink-soft transition hover:bg-paper hover:text-terracotta"
+                >
+                  复制
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="mt-4 grid gap-3.5 sm:grid-cols-3">
+        <TextField
+          label="当前密码"
+          type="password"
+          value={pwd.current}
+          onChange={(e) => setPwd({ ...pwd, current: e.target.value })}
+        />
+        <TextField
+          label="新密码"
+          type="password"
+          hint="至少 6 位"
+          value={pwd.next}
+          onChange={(e) => setPwd({ ...pwd, next: e.target.value })}
+        />
+        <TextField
+          label="再输一次"
+          type="password"
+          value={pwd.confirm}
+          onChange={(e) => setPwd({ ...pwd, confirm: e.target.value })}
+        />
+      </div>
+      {pwdError && (
+        <p className="mt-2 rounded-xl border border-[#e6c3ba] bg-[#fbeee9] px-3 py-2 text-[13px] text-[#b34433]">{pwdError}</p>
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Btn variant="soft" size="sm" onClick={changePassword} disabled={pwdBusy}>
+          {pwdBusy ? "修改中…" : "修改我的密码"}
+        </Btn>
+        <Btn variant="outline" size="sm" onClick={logout}>
+          退出登录
+        </Btn>
+      </div>
+    </section>
   );
 }

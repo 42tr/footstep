@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 import { SettingsView, type MemberInfo } from "@/components/settings-view";
+import { isNull } from "drizzle-orm";
 import { getChatGPTUser } from "@/app/chatgpt-auth";
 import { listMedia, listMembers } from "@/lib/data";
 import { loadPageData } from "@/lib/page-data";
+import { getDb } from "@/lib/platform/db";
+import { invites } from "@/db/schema";
+import { isNodePlatform } from "@/lib/platform/target";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "设置" };
@@ -33,9 +37,25 @@ export default async function SettingsPage() {
     }
   }
 
+  const nodeMode = isNodePlatform();
+  let pendingInvites: Array<{ code: string; label: string; createdAt: string }> = [];
+  if (nodeMode) {
+    try {
+      pendingInvites = await getDb()
+        .select({ code: invites.code, label: invites.label, createdAt: invites.createdAt })
+        .from(invites)
+        .where(isNull(invites.usedBy))
+        .all();
+    } catch {
+      pendingInvites = [];
+    }
+  }
+
   return (
     <SettingsView
       kids={kids}
+      nodeMode={nodeMode}
+      pendingInvites={pendingInvites}
       currentChildId={child?.id ?? null}
       member={member}
       storage={storage}
