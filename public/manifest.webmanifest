@@ -1,0 +1,16 @@
+{
+  "name": "小脚印 · 宝宝成长纪念站",
+  "short_name": "小脚印",
+  "description": "只属于一家人的成长纪念册：照片视频相册、成长时间线、身高体重曲线和「第一次」打卡。",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fdf7ec",
+  "theme_color": "#fdf7ec",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

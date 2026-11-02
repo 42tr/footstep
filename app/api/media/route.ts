@@ -1,0 +1,81 @@
+import { desc, eq } from "drizzle-orm";
+import { getDb } from "@/db";
+import { children, media } from "@/db/schema";
+import { badRequest, clampNumber, clampString, serverError } from "@/lib/api";
+import { getActor } from "@/lib/identity";
+import { getBucket, mediaKey, thumbKey } from "@/lib/r2";
+import { isValidYmd, todayYmd } from "@/lib/time";
+
+export const dynamic = "force-dynamic";
+
+export async function GET(request: Request) {
+  try {
+    const url = new URL(request.url);
+    const childId = Number(url.searchParams.get("childId"));
+    if (!Number.isInteger(childId) || childId <= 0) return badRequest("childId 不合法");
+    const db = getDb();
+    const rows = await db
+      .select()
+      .from(media)
+      .where(eq(media.childId, childId))
+      .orderBy(desc(media.takenAt), desc(media.id))
+      .limit(800)
+      .all();
+    return Response.json({ media: rows });
+  } catch (error) {
+    return serverError(error);
+  }
+}
+
+/** 文件已经流式传到 R2，这里只落库元数据。 */
+export async function POST(request: Request) {
+  try {
+    const payload = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const childId = Number(payload.childId);
+    const uploadId = clampString(payload.uploadId, 64);
+    const kind = payload.kind === "video" ? "video" : "photo";
+
+    if (!Number.isInteger(childId) || childId <= 0) return badRequest("childId 不合法");
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(uploadId)) return badRequest("uploadId 不合法");
+
+    const db = getDb();
+    const child = await db.select({ id: children.id }).from(children).where(eq(children.id, childId)).get();
+    if (!child) return badRequest("这个孩子不存在");
+
+    const bucket = getBucket();
+    const fileKey = mediaKey(childId, uploadId);
+    const stored = await bucket.head(fileKey);
+    if (!stored) return badRequest("文件还没传完，先上传再保存");
+
+    const tKey = thumbKey(childId, uploadId);
+    const thumb = await bucket.head(tKey);
+
+    const takenAtRaw = clampString(payload.takenAt, 10);
+    const takenAt = isValidYmd(takenAtRaw) ? takenAtRaw : todayYmd();
+    const actor = await getActor();
+
+    const [row] = await db
+      .insert(media)
+      .values({
+        childId,
+        kind,
+        fileKey,
+        thumbKey: thumb ? tKey : null,
+        mime: clampString(payload.mime, 120) || stored.httpMetadata?.contentType || "",
+        bytes: stored.size,
+        width: clampNumber(payload.width, 1, 20000),
+        height: clampNumber(payload.height, 1, 20000),
+        durationMs: kind === "video" ? clampNumber(payload.durationMs, 0, 86400000) : null,
+        takenAt,
+        caption: clampString(payload.caption, 500),
+        album: clampString(payload.album, 60),
+        favorite: payload.favorite === true,
+        uploadedBy: actor.label,
+      })
+      .returning();
+
+    return Response.json({ media: row }, { status: 201 });
+  } catch (error) {
+    return serverError(error);
+  }
+}
