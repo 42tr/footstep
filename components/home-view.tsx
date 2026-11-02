@@ -12,7 +12,7 @@ import { MomentDialog } from "@/components/moment-dialog";
 import { UploadButton } from "@/components/uploader";
 import { cn } from "@/lib/utils";
 import { FIRST_PRESETS, PRESET_MAP } from "@/lib/firsts";
-import { categoryStyle } from "@/lib/ui-tokens";
+import { categoryStyle, CONSTELLATION_GLYPH, ZODIAC_EMOJI } from "@/lib/ui-tokens";
 import { formatYmdCn, relativeDayCn, todayYmd, weekdayCn } from "@/lib/time";
 import type { Child, FirstItem, GrowthItem, MediaItem, MomentItem } from "@/lib/types";
 
@@ -74,7 +74,15 @@ export function HomeView({
       <section className="scrap-card relative mb-5 overflow-hidden">
         <span className="tape -left-6 top-5 -rotate-[24deg]" aria-hidden />
         <span className="tape -right-6 bottom-6 -rotate-[24deg]" aria-hidden />
-        <div className="grid gap-5 p-5 sm:p-7 md:grid-cols-[auto_minmax(0,1fr)] md:items-center">
+        {child.zodiac && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute -bottom-8 -right-4 z-0 select-none text-[150px] leading-none opacity-[0.07] rotate-[-10deg] sm:text-[190px]"
+          >
+            {ZODIAC_EMOJI[child.zodiac] ?? "🐾"}
+          </span>
+        )}
+        <div className="relative z-10 grid gap-5 p-5 sm:p-7 md:grid-cols-[auto_minmax(0,1fr)] md:items-center">
           <div className="relative mx-auto md:mx-0">
             <div className="rotate-[-3deg] rounded-[20px] border border-line bg-paper p-2.5 pb-6 shadow-[0_16px_36px_-22px_rgba(90,64,36,.9)]">
               <div
@@ -93,8 +101,9 @@ export function HomeView({
                   </span>
                 )}
               </div>
-              <p className="font-hand absolute inset-x-0 bottom-1.5 text-center text-[13px] text-ink-soft">
-                {formatYmdCn(child.birthDate)}
+              <p className="font-hand absolute inset-x-0 bottom-1.5 text-center text-[12.5px] leading-tight text-ink-soft">
+                {formatYmdCn(child.birthDate)} {weekdayCn(child.birthDate)}
+                {child.birthTime ? ` ${child.birthTime}` : ""}
               </p>
             </div>
           </div>
@@ -117,20 +126,32 @@ export function HomeView({
               )}
             </h1>
 
-            <p className="mt-1.5 font-display text-lg text-terracotta sm:text-xl">
-              {child.ageLong}
-              <span className="ml-2 text-sm text-ink-soft">
-                {formatYmdCn(child.birthDate)} {weekdayCn(child.birthDate)}
-                {child.birthTime ? ` ${child.birthTime}` : ""}
-              </span>
-            </p>
+            <p className="font-display mt-1.5 text-lg text-terracotta sm:text-xl">{child.ageLong}</p>
 
-            <p className="mt-1.5 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 text-[12.5px] text-ink-soft md:justify-start">
-              {child.zodiac && <span>属{child.zodiac}</span>}
-              {child.constellation && <span>· {child.constellation}</span>}
-              {child.birthWeightKg && <span>· 出生 {child.birthWeightKg}kg</span>}
-              {child.birthHeightCm && <span>/ {child.birthHeightCm}cm</span>}
-            </p>
+            <div className="mt-2.5 flex flex-wrap justify-center gap-2 md:justify-start">
+              {child.zodiac && (
+                <InfoSticker
+                  icon={ZODIAC_EMOJI[child.zodiac] ?? "🐾"}
+                  label={`属${child.zodiac}`}
+                  tint={child.tint}
+                  rotate="-3deg"
+                />
+              )}
+              {child.constellation && (
+                <InfoSticker
+                  icon={CONSTELLATION_GLYPH[child.constellation] ?? "✦"}
+                  label={child.constellation}
+                  tint="#8FB9D9"
+                  rotate="2deg"
+                />
+              )}
+              {child.birthWeightKg !== null && (
+                <InfoSticker icon="⚖️" label={`${child.birthWeightKg}kg`} tint="#7FA98B" rotate="-2deg" />
+              )}
+              {child.birthHeightCm !== null && (
+                <InfoSticker icon="📏" label={`${child.birthHeightCm}cm`} tint="#F0A35E" rotate="3deg" />
+              )}
+            </div>
 
             {child.bio && (
               <p className="font-hand mx-auto mt-3 max-w-xl text-[15px] leading-relaxed text-ink/80 md:mx-0">
@@ -443,5 +464,37 @@ function Row({
         <span className="text-[11px] text-ink-soft">{unit}</span>
       </span>
     </div>
+  );
+}
+
+/** 信息贴纸：图形为主、文字只做注解，替代原来的散文信息行。 */
+function InfoSticker({
+  icon,
+  label,
+  tint,
+  rotate,
+}: {
+  icon: string;
+  label: string;
+  tint: string;
+  rotate: string;
+}) {
+  return (
+    <span
+      title={label}
+      className="sticker gap-1 border border-black/[0.04] px-2.5 py-1"
+      style={{
+        background: `color-mix(in srgb, ${tint} 14%, #fffdf8)`,
+        ["--ls-rot" as string]: rotate,
+        transform: `rotate(${rotate})`,
+      }}
+    >
+      <span className="text-[15px] leading-none" aria-hidden>
+        {icon}
+      </span>
+      <span className="text-[11px] font-medium leading-none" style={{ color: tint }}>
+        {label}
+      </span>
+    </span>
   );
 }
