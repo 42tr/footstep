@@ -1,3 +1,4 @@
+import { denyIfAnonymous } from "@/lib/platform/guard";
 import { getDb } from "@/db";
 import { children, firsts, growth, media, moments } from "@/db/schema";
 import { serverError } from "@/lib/api";
@@ -7,6 +8,8 @@ export const dynamic = "force-dynamic";
 
 /** 一键导出全站的 JSON，方便以后搬家或做备份。 */
 export async function GET() {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const db = getDb();
     const [kids, allMedia, allMoments, allGrowth, allFirsts] = await Promise.all([

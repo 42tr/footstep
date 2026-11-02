@@ -1,14 +1,18 @@
+import { denyIfAnonymous } from "@/lib/platform/guard";
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { children, media } from "@/db/schema";
 import { badRequest, clampNumber, clampString, serverError } from "@/lib/api";
 import { getActor } from "@/lib/identity";
-import { getBucket, mediaKey, thumbKey } from "@/lib/r2";
+import { mediaKey, thumbKey } from "@/lib/r2";
+import { getStorage } from "@/lib/platform/storage";
 import { isValidYmd, todayYmd } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const url = new URL(request.url);
     const childId = Number(url.searchParams.get("childId"));
@@ -29,6 +33,8 @@ export async function GET(request: Request) {
 
 /** 文件已经流式传到 R2，这里只落库元数据。 */
 export async function POST(request: Request) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const payload = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const childId = Number(payload.childId);
@@ -42,13 +48,13 @@ export async function POST(request: Request) {
     const child = await db.select({ id: children.id }).from(children).where(eq(children.id, childId)).get();
     if (!child) return badRequest("这个孩子不存在");
 
-    const bucket = getBucket();
+    const storage = getStorage();
     const fileKey = mediaKey(childId, uploadId);
-    const stored = await bucket.head(fileKey);
+    const stored = await storage.head(fileKey);
     if (!stored) return badRequest("文件还没传完，先上传再保存");
 
     const tKey = thumbKey(childId, uploadId);
-    const thumb = await bucket.head(tKey);
+    const thumb = await storage.head(tKey);
 
     const takenAtRaw = clampString(payload.takenAt, 10);
     const takenAt = isValidYmd(takenAtRaw) ? takenAtRaw : todayYmd();
@@ -61,7 +67,7 @@ export async function POST(request: Request) {
         kind,
         fileKey,
         thumbKey: thumb ? tKey : null,
-        mime: clampString(payload.mime, 120) || stored.httpMetadata?.contentType || "",
+        mime: clampString(payload.mime, 120) || stored.contentType || "",
         bytes: stored.size,
         width: clampNumber(payload.width, 1, 20000),
         height: clampNumber(payload.height, 1, 20000),

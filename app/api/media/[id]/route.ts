@@ -1,8 +1,9 @@
+import { denyIfAnonymous } from "@/lib/platform/guard";
 import { eq, like } from "drizzle-orm";
 import { getDb } from "@/db";
 import { media, moments } from "@/db/schema";
 import { badRequest, clampString, notFound, parseId, serverError } from "@/lib/api";
-import { getBucket } from "@/lib/r2";
+import { getStorage } from "@/lib/platform/storage";
 import { isValidYmd } from "@/lib/time";
 import { parseMediaIds } from "@/lib/data";
 
@@ -11,6 +12,8 @@ export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: Request, ctx: Ctx) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const id = parseId((await ctx.params).id);
     if (!id) return badRequest("id 不合法");
@@ -40,6 +43,8 @@ export async function PATCH(request: Request, ctx: Ctx) {
 }
 
 export async function DELETE(_request: Request, ctx: Ctx) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const id = parseId((await ctx.params).id);
     if (!id) return badRequest("id 不合法");
@@ -63,11 +68,8 @@ export async function DELETE(_request: Request, ctx: Ctx) {
 
     await db.delete(media).where(eq(media.id, id));
 
-    const bucket = getBucket();
-    await Promise.allSettled([
-      bucket.delete(row.fileKey),
-      row.thumbKey ? bucket.delete(row.thumbKey) : Promise.resolve(),
-    ]);
+    const storage = getStorage();
+    await Promise.allSettled([storage.delete(row.fileKey), row.thumbKey ? storage.delete(row.thumbKey) : Promise.resolve()]);
 
     return Response.json({ ok: true, id });
   } catch (error) {

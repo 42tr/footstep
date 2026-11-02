@@ -1,5 +1,8 @@
+import { redirect } from "next/navigation";
+import { getActor } from "@/lib/identity";
 import { serializeChild } from "@/lib/serialize";
 import { resolveShell } from "@/lib/session";
+import { isNodePlatform } from "@/lib/platform/target";
 import type { Child } from "@/lib/types";
 
 export type PageData = {
@@ -10,6 +13,10 @@ export type PageData = {
 
 /** 每个页面都要的「当前孩子 + 全部孩子」，统一在这里读。 */
 export async function loadPageData(): Promise<PageData> {
+  if (isNodePlatform()) {
+    const actor = await getActor();
+    if (!actor.userId) redirect("/login");
+  }
   const shell = await resolveShell();
   const kids = shell.children.map((row, index) => serializeChild(row, index));
   const child = shell.child

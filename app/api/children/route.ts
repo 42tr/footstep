@@ -1,3 +1,4 @@
+import { denyIfAnonymous } from "@/lib/platform/guard";
 import { asc, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { children } from "@/db/schema";
@@ -7,6 +8,8 @@ import { isValidYmd } from "@/lib/time";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const rows = await getDb()
       .select()
@@ -20,6 +23,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const p = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const name = clampString(p.name, 40);

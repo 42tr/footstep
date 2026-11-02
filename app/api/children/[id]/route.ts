@@ -1,24 +1,23 @@
+import { denyIfAnonymous } from "@/lib/platform/guard";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { children } from "@/db/schema";
 import { badRequest, clampNumber, clampString, notFound, parseId, readNumber, serverError } from "@/lib/api";
-import { avatarKey, getBucket } from "@/lib/r2";
+import { avatarKey } from "@/lib/r2";
+import { getStorage } from "@/lib/platform/storage";
 import { isValidYmd } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
 
-async function deletePrefix(bucket: R2Bucket, prefix: string) {
-  let cursor: string | undefined;
-  let guard = 0;
-  do {
-    const page = await bucket.list({ prefix, cursor, limit: 1000 });
-    if (page.objects.length) await bucket.delete(page.objects.map((o) => o.key));
-    cursor = page.truncated ? page.cursor : undefined;
-  } while (cursor && ++guard < 200);
+async function deletePrefix(storage: ReturnType<typeof getStorage>, prefix: string) {
+  const keys = await storage.list(prefix);
+  await Promise.allSettled(keys.map((key) => storage.delete(key)));
 }
 
 export async function PATCH(request: Request, ctx: Ctx) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const id = parseId((await ctx.params).id);
     if (!id) return badRequest("id 不合法");
@@ -60,16 +59,16 @@ export async function PATCH(request: Request, ctx: Ctx) {
       const uploadId = clampString(p.avatarUploadId, 64);
       if (!/^[A-Za-z0-9_-]{1,64}$/.test(uploadId)) return badRequest("avatarUploadId 不合法");
       const key = avatarKey(id, uploadId);
-      const stored = await getBucket().head(key);
+      const stored = await getStorage().head(key);
       if (!stored) return badRequest("头像还没传完");
       const old = row.avatarKey;
       patch.avatarKey = key;
-      if (old && old !== key) void getBucket().delete(old).catch(() => {});
+      if (old && old !== key) void getStorage().delete(old).catch(() => {});
     }
     if (p.avatarKey === null) {
       const old = row.avatarKey;
       patch.avatarKey = null;
-      if (old) void getBucket().delete(old).catch(() => {});
+      if (old) void getStorage().delete(old).catch(() => {});
     }
 
     if (!Object.keys(patch).length) return Response.json({ child: row });
@@ -81,6 +80,8 @@ export async function PATCH(request: Request, ctx: Ctx) {
 }
 
 export async function DELETE(_request: Request, ctx: Ctx) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const id = parseId((await ctx.params).id);
     if (!id) return badRequest("id 不合法");
@@ -90,11 +91,11 @@ export async function DELETE(_request: Request, ctx: Ctx) {
 
     // 外键是 ON DELETE CASCADE，记录会自动清掉；R2 里的文件要自己删
     await db.delete(children).where(eq(children.id, id));
-    const bucket = getBucket();
+    const storage = getStorage();
     await Promise.allSettled([
-      deletePrefix(bucket, `m/${id}/`),
-      deletePrefix(bucket, `t/${id}/`),
-      deletePrefix(bucket, `a/${id}/`),
+      deletePrefix(storage, `m/${id}/`),
+      deletePrefix(storage, `t/${id}/`),
+      deletePrefix(storage, `a/${id}/`),
     ]);
 
     return Response.json({ ok: true, id });

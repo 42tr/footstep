@@ -111,9 +111,37 @@ export const members = sqliteTable("members", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+/** 自建部署（Node 目标）用的家庭账号。Cloudflare 目标不使用这几张表。 */
+export const accounts = sqliteTable("accounts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  nickname: text("nickname").notNull().unique(),
+  passHash: text("pass_hash").notNull(),
+  role: text("role").notNull().default("家人"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const sessions = sqliteTable("sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  accountId: integer("account_id")
+    .notNull()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  lastSeenAt: text("last_seen_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const invites = sqliteTable("invites", {
+  code: text("code").primaryKey(),
+  label: text("label").notNull().default(""),
+  usedBy: integer("used_by"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export type ChildRow = typeof children.$inferSelect;
 export type MediaRow = typeof media.$inferSelect;
 export type MomentRow = typeof moments.$inferSelect;
 export type GrowthRow = typeof growth.$inferSelect;
 export type FirstRow = typeof firsts.$inferSelect;
 export type MemberRow = typeof members.$inferSelect;
+export type AccountRow = typeof accounts.$inferSelect;
+export type SessionRow = typeof sessions.$inferSelect;
+export type InviteRow = typeof invites.$inferSelect;

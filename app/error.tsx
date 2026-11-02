@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { Btn } from "@/components/controls";
 import { Logo } from "@/components/logo";
 
@@ -28,9 +29,9 @@ export default function ErrorBoundary({
       </p>
       <div className="mt-5 flex justify-center gap-2">
         <Btn onClick={reset}>重试这一页</Btn>
-        <a href="/">
+        <Link href="/">
           <Btn variant="outline">回首页</Btn>
-        </a>
+        </Link>
       </div>
     </div>
   );

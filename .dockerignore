@@ -1,0 +1,12 @@
+.next
+.vinext
+.wrangler
+.sites-runtime
+dist
+outputs
+.git
+*.tsbuildinfo
+.env*
+.dev.vars*
+Dockerfile
+.dockerignore

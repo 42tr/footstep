@@ -1,3 +1,4 @@
+import { denyIfAnonymous } from "@/lib/platform/guard";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { growth } from "@/db/schema";
@@ -8,6 +9,8 @@ export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: Request, ctx: Ctx) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const id = parseId((await ctx.params).id);
     if (!id) return badRequest("id 不合法");
@@ -47,6 +50,8 @@ export async function PATCH(request: Request, ctx: Ctx) {
 }
 
 export async function DELETE(_request: Request, ctx: Ctx) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const id = parseId((await ctx.params).id);
     if (!id) return badRequest("id 不合法");

@@ -1,8 +1,10 @@
+import { denyIfAnonymous } from "@/lib/platform/guard";
 import { eq } from "drizzle-orm";
 import { badRequest, serverError } from "@/lib/api";
 import { getDb } from "@/db";
 import { children } from "@/db/schema";
-import { avatarKey, getBucket, MAX_UPLOAD_BYTES, mediaKey, thumbKey } from "@/lib/r2";
+import { avatarKey, MAX_UPLOAD_BYTES, mediaKey, thumbKey } from "@/lib/r2";
+import { getStorage } from "@/lib/platform/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +15,8 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
  * 这样几百 MB 的视频也不会撑爆 128MB 的 isolate。
  */
 export async function POST(request: Request) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const url = new URL(request.url);
     const scope = url.searchParams.get("scope") ?? "";
@@ -46,7 +50,7 @@ export async function POST(request: Request) {
       request.headers.get("content-type") ??
       (scope === "t" || scope === "a" ? "image/jpeg" : "application/octet-stream");
 
-    await getBucket().put(key, request.body, { httpMetadata: { contentType } });
+    await getStorage().put(key, request.body, contentType);
 
     return Response.json({ key, uploadId });
   } catch (error) {

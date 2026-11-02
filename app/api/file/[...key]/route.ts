@@ -1,5 +1,6 @@
+import { denyIfAnonymous } from "@/lib/platform/guard";
 import { serverError } from "@/lib/api";
-import { getBucket } from "@/lib/r2";
+import { getStorage, parseRangeHeader } from "@/lib/platform/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -14,27 +15,25 @@ function resolveKey(segments: string[] | undefined): string | null {
 }
 
 export async function GET(request: Request, ctx: { params: Promise<{ key: string[] }> }) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const { key: segments } = await ctx.params;
     const key = resolveKey(segments);
     if (!key) return new Response(null, { status: 404 });
 
-    const bucket = getBucket();
-    // 把请求头交给 R2，让它自己解析 Range，视频拖拽才能生效。
-    const object = await bucket.get(key, { range: request.headers });
+    const range = parseRangeHeader(request.headers.get("range"));
+    const object = await getStorage().get(key, range);
     if (!object) return new Response(null, { status: 404 });
 
     const headers = new Headers();
-    object.writeHttpMetadata(headers);
-    headers.set("etag", object.httpEtag);
+    if (object.contentType) headers.set("content-type", object.contentType);
     headers.set("accept-ranges", "bytes");
     headers.set("cache-control", "private, max-age=31536000, immutable");
     headers.set("x-content-type-options", "nosniff");
 
-    const applied = object.range as { offset?: number; length?: number } | undefined;
-    if (applied && request.headers.has("range")) {
-      const length = applied.length ?? 0;
-      const offset = applied.offset ?? Math.max(0, object.size - length);
+    if (object.range) {
+      const { offset, length } = object.range;
       headers.set("content-range", `bytes ${offset}-${Math.max(offset, offset + length - 1)}/${object.size}`);
       headers.set("content-length", String(length));
       return new Response(object.body, { status: 206, headers });
@@ -48,17 +47,18 @@ export async function GET(request: Request, ctx: { params: Promise<{ key: string
 }
 
 export async function HEAD(request: Request, ctx: { params: Promise<{ key: string[] }> }) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const { key: segments } = await ctx.params;
     const key = resolveKey(segments);
     if (!key) return new Response(null, { status: 404 });
 
-    const object = await getBucket().head(key);
+    const object = await getStorage().head(key);
     if (!object) return new Response(null, { status: 404 });
 
     const headers = new Headers();
-    object.writeHttpMetadata(headers);
-    headers.set("etag", object.httpEtag);
+    if (object.contentType) headers.set("content-type", object.contentType);
     headers.set("accept-ranges", "bytes");
     headers.set("content-length", String(object.size));
     return new Response(null, { status: 200, headers });

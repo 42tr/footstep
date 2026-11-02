@@ -23,6 +23,12 @@
       }
     ],
     "paths": {
+      "@/platform/db-impl": [
+        "./lib/platform/db-cf.ts"
+      ],
+      "@/platform/storage-impl": [
+        "./lib/platform/storage-cf.ts"
+      ],
       "@/*": [
         "./*"
       ]

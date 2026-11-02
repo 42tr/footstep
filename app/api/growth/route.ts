@@ -1,3 +1,4 @@
+import { denyIfAnonymous } from "@/lib/platform/guard";
 import { asc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { children, growth } from "@/db/schema";
@@ -8,6 +9,8 @@ import { isValidYmd, todayYmd } from "@/lib/time";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const childId = Number(new URL(request.url).searchParams.get("childId"));
     if (!Number.isInteger(childId) || childId <= 0) return badRequest("childId 不合法");
@@ -24,6 +27,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const p = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const childId = Number(p.childId);

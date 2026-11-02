@@ -1,3 +1,4 @@
+import { denyIfAnonymous } from "@/lib/platform/guard";
 import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
 import { CHILD_COOKIE } from "@/lib/session";
@@ -8,6 +9,8 @@ import { children } from "@/db/schema";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const payload = (await request.json().catch(() => ({}))) as { childId?: unknown };
     const childId = Number(payload.childId);

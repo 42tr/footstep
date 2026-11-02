@@ -1,3 +1,4 @@
+import { denyIfAnonymous } from "@/lib/platform/guard";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { moments } from "@/db/schema";
@@ -11,6 +12,8 @@ const VALID = new Set<string>(MOMENT_CATEGORIES.map((c) => c.key));
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: Request, ctx: Ctx) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const id = parseId((await ctx.params).id);
     if (!id) return badRequest("id 不合法");
@@ -45,6 +48,8 @@ export async function PATCH(request: Request, ctx: Ctx) {
 }
 
 export async function DELETE(_request: Request, ctx: Ctx) {
+  const denied = await denyIfAnonymous();
+  if (denied) return denied;
   try {
     const id = parseId((await ctx.params).id);
     if (!id) return badRequest("id 不合法");
