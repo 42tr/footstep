@@ -416,48 +416,86 @@ function FirstCard({
   onOpen: () => void;
 }) {
   const done = Boolean(record?.achievedOn);
+  const photo = record?.thumbUrl ?? record?.mediaUrl ?? null;
+  const dateLine = `${record?.achievedOn ? formatYmdCn(record.achievedOn) : ""}${ageLabel ? ` · ${ageLabel}大` : ""}`;
+
+  // 有照片：图片铺满整张卡，文字沉在底部半透明黑遮罩上
+  if (done && photo) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        className="group relative aspect-[4/5] w-full overflow-hidden rounded-2xl bg-cream-deep text-left ring-1 ring-black/[0.06] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_34px_-20px_rgba(20,14,8,.95)] focus-visible:-translate-y-0.5"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={photo}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-[1.05]"
+        />
+
+        <span
+          className="absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/35 text-base backdrop-blur-[2px]"
+          aria-hidden
+        >
+          {emoji}
+        </span>
+        <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-sage text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,.6)]">
+          <Check className="h-3 w-3" strokeWidth={3} />
+        </span>
+
+        <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/45 to-transparent px-3 pb-2.5 pt-12 text-left">
+          <span className="block text-[13.5px] font-medium leading-snug text-white">{label}</span>
+          <span className="mt-0.5 block text-[11px] tabular-nums text-white/75">{dateLine}</span>
+          {record?.note && (
+            <span className="font-hand mt-1 line-clamp-2 block text-[11.5px] leading-snug text-white/85">
+              {record.note}
+            </span>
+          )}
+        </span>
+      </button>
+    );
+  }
+
+  // 没照片 / 还没打卡：纸感卡片，比例与照片卡一致，网格才整齐
   return (
     <button
       type="button"
       onClick={onOpen}
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-2xl border p-3 text-left transition duration-200",
+        "group relative flex aspect-[4/5] w-full flex-col overflow-hidden p-3 text-left transition duration-200",
         done
-          ? "border-line bg-paper shadow-[0_8px_20px_-16px_rgba(122,92,58,.7)] hover:-translate-y-0.5 hover:shadow-[0_16px_30px_-18px_rgba(122,92,58,.8)]"
-          : "dashed-frame border-2 bg-paper/45 hover:border-apricot hover:bg-accent/35",
+          ? "rounded-2xl border border-line bg-paper shadow-[0_8px_20px_-16px_rgba(122,92,58,.7)] hover:-translate-y-0.5 hover:shadow-[0_16px_30px_-18px_rgba(122,92,58,.8)]"
+          : "dashed-frame bg-paper/45 hover:border-apricot hover:bg-accent/35",
       )}
       style={done ? undefined : { borderRadius: "1rem" }}
     >
-      {record?.thumbUrl && (
-        <span className="absolute inset-x-0 top-0 h-16 overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={record.thumbUrl} alt="" loading="lazy" className="h-full w-full object-cover opacity-90" />
-          <span className="absolute inset-0 bg-gradient-to-t from-paper via-paper/45 to-transparent" />
-        </span>
-      )}
-
       <span
         className={cn(
-          "sticker relative mb-2 h-10 w-10 text-xl transition",
+          "sticker mb-2 h-10 w-10 shrink-0 text-xl",
           done ? "bg-accent" : "bg-cream-deep opacity-55 grayscale",
-          record?.thumbUrl && "mt-11",
         )}
         aria-hidden
       >
         {emoji}
       </span>
 
-      <span className={cn("relative block text-[13.5px] font-medium leading-snug", done ? "text-ink" : "text-ink-soft")}>
+      <span className={cn("block text-[13.5px] font-medium leading-snug", done ? "text-ink" : "text-ink-soft")}>
         {label}
       </span>
 
       {done ? (
-        <span className="relative mt-1 block text-[11px] text-ink-soft">
-          {record?.achievedOn ? formatYmdCn(record.achievedOn) : ""}
-          {ageLabel ? ` · ${ageLabel}大` : ""}
-        </span>
+        <span className="mt-1 block text-[11px] text-ink-soft">{dateLine}</span>
       ) : (
-        <span className="relative mt-1 block text-[10.5px] text-ink-soft/70">{hint}</span>
+        <span className="mt-1 block text-[10.5px] text-ink-soft/70">{hint}</span>
+      )}
+
+      {done && record?.note && (
+        <span className="font-hand mt-1.5 line-clamp-3 block text-[11.5px] leading-snug text-ink-soft/85">
+          {record.note}
+        </span>
       )}
 
       {done && (
@@ -469,12 +507,6 @@ function FirstCard({
         <span className="absolute right-2.5 top-2.5 flex items-center gap-0.5 text-[10.5px] text-ink-soft/60 opacity-0 transition group-hover:opacity-100">
           <Pencil className="h-3 w-3" />
           打卡
-        </span>
-      )}
-
-      {done && record?.note && (
-        <span className="font-hand relative mt-1.5 line-clamp-2 block text-[11.5px] leading-snug text-ink-soft/85">
-          {record.note}
         </span>
       )}
     </button>
