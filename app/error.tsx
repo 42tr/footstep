@@ -17,6 +17,7 @@ export default function ErrorBoundary({
   }, [error]);
 
   return (
+    <main className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-24 pt-20">
     <div className="scrap-card mx-auto max-w-lg px-6 py-12 text-center">
       <Logo className="mx-auto h-14 w-14 opacity-80" />
       <h1 className="font-display mt-4 text-xl font-bold text-ink">这一页翻不过去</h1>
@@ -34,5 +35,6 @@ export default function ErrorBoundary({
         </Link>
       </div>
     </div>
+    </main>
   );
 }

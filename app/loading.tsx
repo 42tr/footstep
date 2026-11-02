@@ -1,5 +1,6 @@
 export default function Loading() {
   return (
+    <main className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-24 pt-10 sm:px-6">
     <div className="animate-ls-fade" aria-busy="true" aria-label="加载中">
       <div className="mb-5 flex items-center gap-3">
         <span className="sticker h-12 w-12 animate-pulse bg-accent" />
@@ -16,5 +17,6 @@ export default function Loading() {
       </div>
       <p className="font-hand mt-6 text-center text-sm text-ink-soft/70">正在翻开这一页…</p>
     </div>
+    </main>
   );
 }

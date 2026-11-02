@@ -1,10 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { SiteNav, type NavChild } from "@/components/site-nav";
-import { getActor } from "@/lib/identity";
-import { fileUrl } from "@/lib/media-url";
-import { resolveShell } from "@/lib/session";
-import { formatAge } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -34,8 +29,6 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   themeColor: "#fdf7ec",
 };
-
-const TINTS = ["#E2795B", "#7FA98B", "#8FB9D9", "#F0A35E", "#B58BB0", "#EE8F7D"];
 
 function BackgroundDecor() {
   return (
@@ -68,40 +61,17 @@ function BackgroundDecor() {
   );
 }
 
-export default async function RootLayout({
-  children,
-}: Readonly<{ children: React.ReactNode }>) {
-  const [shell, actor] = await Promise.all([resolveShell(), getActor()]);
-
-  const kids: NavChild[] = shell.children.map((kid, index) => ({
-    id: kid.id,
-    name: kid.name,
-    nickname: kid.nickname,
-    avatarUrl: fileUrl(kid.avatarKey),
-    ageLabel: formatAge(kid.age),
-    tint: TINTS[index % TINTS.length],
-  }));
-
+/**
+ * 根布局只负责 html/body 和背景装饰。
+ * 导航、页脚属于「家庭区」，放在 (family)/layout.tsx 里——
+ * 这样登录页和错误页不会泄漏任何登录后的界面元素。
+ */
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="zh-CN">
       <body className="min-h-dvh antialiased">
         <BackgroundDecor />
-        <SiteNav kids={kids} selectedId={shell.child?.id ?? null} actorLabel={actor.label} />
-
-        <main className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-28 pt-6 sm:px-6 lg:pb-14">
-          {!shell.dbReady && (
-            <div className="mb-5 rounded-2xl border border-butter/70 bg-butter/15 px-4 py-3 text-sm text-ink-soft">
-              数据库还没准备好，正在等第一次部署把表结构应用上去。刷新一下通常就好了。
-            </div>
-          )}
-          {children}
-        </main>
-
-        <footer className="relative z-10 mx-auto max-w-6xl px-4 pb-28 pt-4 text-center sm:px-6 lg:pb-12">
-          <p className="font-hand text-sm text-ink-soft/75">
-            小脚印 · 只属于我们一家人的成长纪念册
-          </p>
-        </footer>
+        {children}
       </body>
     </html>
   );

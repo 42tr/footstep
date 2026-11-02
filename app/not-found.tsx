@@ -4,6 +4,7 @@ import { Logo } from "@/components/logo";
 
 export default function NotFound() {
   return (
+    <main className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-24 pt-20">
     <div className="scrap-card mx-auto max-w-md px-6 py-14 text-center">
       <Logo className="mx-auto h-14 w-14" />
       <h1 className="font-display mt-4 text-2xl font-bold text-ink">这一页不存在</h1>
@@ -14,5 +15,6 @@ export default function NotFound() {
         </Link>
       </div>
     </div>
+    </main>
   );
 }
