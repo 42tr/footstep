@@ -6,6 +6,7 @@ import { badRequest, clampString, notFound, parseId, serverError } from "@/lib/a
 import { getStorage } from "@/lib/platform/storage";
 import { isValidYmd } from "@/lib/time";
 import { parseMediaIds } from "@/lib/data";
+import { serializeMedia } from "@/lib/serialize";
 
 export const dynamic = "force-dynamic";
 
@@ -34,9 +35,9 @@ export async function PATCH(request: Request, ctx: Ctx) {
       patch.takenAt = v;
     }
 
-    if (!Object.keys(patch).length) return Response.json({ media: row });
+    if (!Object.keys(patch).length) return Response.json({ media: serializeMedia(row) });
     const [updated] = await db.update(media).set(patch).where(eq(media.id, id)).returning();
-    return Response.json({ media: updated });
+    return Response.json({ media: serializeMedia(updated) });
   } catch (error) {
     return serverError(error);
   }

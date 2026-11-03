@@ -7,6 +7,7 @@ import { getActor } from "@/lib/identity";
 import { mediaKey, thumbKey } from "@/lib/r2";
 import { getStorage } from "@/lib/platform/storage";
 import { isValidYmd, todayYmd } from "@/lib/time";
+import { serializeMedia } from "@/lib/serialize";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
       .orderBy(desc(media.takenAt), desc(media.id))
       .limit(800)
       .all();
-    return Response.json({ media: rows });
+    return Response.json({ media: rows.map(serializeMedia) });
   } catch (error) {
     return serverError(error);
   }
@@ -80,7 +81,7 @@ export async function POST(request: Request) {
       })
       .returning();
 
-    return Response.json({ media: row }, { status: 201 });
+    return Response.json({ media: serializeMedia(row) }, { status: 201 });
   } catch (error) {
     return serverError(error);
   }
