@@ -185,8 +185,8 @@ export function HomeView({
         <StatTile emoji="🌟" label="已打卡的第一次" value={stats.firstsDone} unit={`/${FIRST_PRESETS.length}`} tint="#F0A35E" />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-        <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-5">
           {/* 最新照片 */}
           <SectionCard
             title="最新的照片"
@@ -281,7 +281,7 @@ export function HomeView({
           </SectionCard>
         </div>
 
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           {/* 成长速览 */}
           <SectionCard
             title="成长速览"
