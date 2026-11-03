@@ -12,6 +12,8 @@ export type PreparedFile = {
   kind: "photo" | "video";
   status: UploadStatus;
   progress: number;
+  /** 当前是第几次尝试（0 = 第一次） */
+  attempt: number;
   error: string | null;
   previewUrl: string;
   width: number | null;
@@ -70,6 +72,7 @@ export function prepareFile(file: File, album = ""): PreparedFile | null {
     kind,
     status: "pending",
     progress: 0,
+    attempt: 0,
     error: null,
     previewUrl: URL.createObjectURL(file),
     width: null,
@@ -81,6 +84,10 @@ export function prepareFile(file: File, album = ""): PreparedFile | null {
     media: null,
   };
 }
+
+export type UploadError = Error & { retryable?: boolean };
+
+const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 
 /** 用 XHR 才能拿到真实的上传进度。 */
 function xhrPut(url: string, blob: Blob, contentType: string, onProgress: (p: number) => void): Promise<void> {
@@ -103,12 +110,56 @@ function xhrPut(url: string, blob: Blob, contentType: string, onProgress: (p: nu
       } catch {
         /* 保留默认提示 */
       }
-      reject(new Error(message));
+      const error: UploadError = new Error(message);
+      // 网关超时/限流这类值得重试；4xx 业务错误重试没意义
+      error.retryable = RETRYABLE_STATUS.has(xhr.status);
+      reject(error);
     };
-    xhr.onerror = () => reject(new Error("网络中断了，检查一下连接再试一次"));
-    xhr.ontimeout = () => reject(new Error("上传超时了"));
+    // 连接被掐断：手机锁屏、切后台、基站切换、代理超时都走这里
+    xhr.onerror = () => {
+      const error: UploadError = new Error("连接中断了");
+      error.retryable = true;
+      reject(error);
+    };
+    xhr.ontimeout = () => {
+      const error: UploadError = new Error("上传超时了");
+      error.retryable = true;
+      reject(error);
+    };
     xhr.send(blob);
   });
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const MAX_ATTEMPTS = 3;
+
+/** 网络级失败自动重试（同一个 uploadId 重传是幂等的，服务器直接覆盖）。 */
+async function putWithRetry(
+  url: string,
+  blob: Blob,
+  contentType: string,
+  onProgress: (p: number) => void,
+  onAttempt: (attempt: number) => void,
+): Promise<void> {
+  let lastError: UploadError | null = null;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      onAttempt(attempt);
+      await sleep(attempt === 1 ? 1500 : 4000);
+      onProgress(0);
+    }
+    try {
+      await xhrPut(url, blob, contentType, onProgress);
+      return;
+    } catch (error) {
+      lastError = error instanceof Error ? (error as UploadError) : new Error(String(error));
+      if (lastError.retryable === false) break;
+    }
+  }
+  throw lastError ?? new Error("上传失败");
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement, quality = 0.82): Promise<Blob | null> {
@@ -293,19 +344,21 @@ export async function uploadPrepared(
 
   const base = `/api/upload?childId=${childId}&uploadId=${encodeURIComponent(prepared.uploadId)}`;
   try {
-    patch({ status: "uploading", progress: 0 });
-    await xhrPut(
+    patch({ status: "uploading", progress: 0, attempt: 0 });
+    await putWithRetry(
       `${base}&scope=m`,
       prepared.file,
       prepared.file.type || "application/octet-stream",
       (p) => patch({ progress: p }),
+      (attempt) => patch({ attempt, progress: 0, status: "uploading" }),
     );
     if (thumbBlob) {
-      await xhrPut(`${base}&scope=t`, thumbBlob, "image/jpeg", () => {});
+      await putWithRetry(`${base}&scope=t`, thumbBlob, "image/jpeg", () => {}, () => {});
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "上传失败";
-    patch({ status: "error", error: message });
+    const message =
+      error instanceof Error ? error.message : "上传失败";
+    patch({ status: "error", error: `${message}（已自动重试 ${MAX_ATTEMPTS - 1} 次）` });
     throw error instanceof Error ? error : new Error(message);
   }
 
@@ -348,10 +401,11 @@ export async function uploadAvatar(file: File, childId: number): Promise<string>
   };
   const thumb = await buildThumb(prepared);
   const blob = thumb.blob ?? file;
-  await xhrPut(
+  await putWithRetry(
     `/api/upload?childId=${childId}&uploadId=${encodeURIComponent(uploadId)}&scope=a`,
     blob,
     "image/jpeg",
+    () => {},
     () => {},
   );
   URL.revokeObjectURL(prepared.previewUrl);

@@ -51,8 +51,15 @@ export function createStorage(): StorageDriver {
       const file = safePath(key);
       if (!file) throw new Error(`非法的对象键：${key}`);
       await mkdir(path.dirname(file), { recursive: true });
-      const tmp = await toTempFile(body);
-      await rename(tmp, file);
+      let tmp: string | null = null;
+      try {
+        tmp = await toTempFile(body);
+        await rename(tmp, file);
+        tmp = null;
+      } finally {
+        // 客户端中断/写失败时别把半成品留在盘上
+        if (tmp) await unlink(tmp).catch(() => {});
+      }
       await writeFile(metaPath(file), JSON.stringify({ contentType })).catch(() => {});
     },
 

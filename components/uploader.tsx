@@ -137,7 +137,9 @@ const ItemCard = memo(function ItemCard({
               <p className={cn("mt-1 text-[11px]", failed ? "text-[#c2503f]" : "text-ink-soft")}>
                 {failed
                   ? item.error
-                  : `${STATUS_LABEL[item.status]}${item.status === "uploading" ? ` ${Math.round(item.progress * 100)}%` : ""}`}
+                  : `${STATUS_LABEL[item.status]}${item.status === "uploading" ? ` ${Math.round(item.progress * 100)}%` : ""}${
+                      item.attempt > 0 && !done ? ` · 第 ${item.attempt + 1} 次尝试` : ""
+                    }`}
               </p>
             </div>
           )}
