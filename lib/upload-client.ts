@@ -42,6 +42,23 @@ export function newUploadId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/** 给任何一步加上硬超时：宁可没有缩略图，也不能让上传卡住。 */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label}超时`)), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 export function prepareFile(file: File, album = ""): PreparedFile | null {
   const kind = detectKind(file);
   if (!kind) return null;
@@ -117,25 +134,40 @@ async function drawToThumb(source: CanvasImageSource, w: number, h: number): Pro
   return canvasToBlob(canvas);
 }
 
-async function imageMeta(file: File): Promise<{ width: number; height: number; bitmap: ImageBitmap | HTMLImageElement | null }> {
-  try {
-    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-    return { width: bitmap.width, height: bitmap.height, bitmap };
-  } catch {
-    // 老浏览器或 HEIC 之类，退回 <img>
-    return new Promise((resolve) => {
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-      const done = (w: number, h: number, el: HTMLImageElement | null) => {
-        URL.revokeObjectURL(url);
-        resolve({ width: w, height: h, bitmap: el });
-      };
-      img.onload = () => done(img.naturalWidth, img.naturalHeight, img);
-      img.onerror = () => done(0, 0, null);
-      setTimeout(() => done(0, 0, null), 12000);
-      img.src = url;
-    });
+type ImageMeta = { width: number; height: number; bitmap: ImageBitmap | HTMLImageElement | null };
+
+async function imageMeta(file: File): Promise<ImageMeta> {
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bitmap = await withTimeout(
+        createImageBitmap(file, { imageOrientation: "from-image" }),
+        5000,
+        "解码图片",
+      );
+      return { width: bitmap.width, height: bitmap.height, bitmap };
+    } catch {
+      // 解码失败（HEIC、部分内置浏览器）落到 <img> 回退
+    }
   }
+  return imageMetaViaImg(file);
+}
+
+function imageMetaViaImg(file: File): Promise<ImageMeta> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    let settled = false;
+    const done = (w: number, h: number, el: HTMLImageElement | null) => {
+      if (settled) return;
+      settled = true;
+      URL.revokeObjectURL(url);
+      resolve({ width: w, height: h, bitmap: el });
+    };
+    img.onload = () => done(img.naturalWidth, img.naturalHeight, img);
+    img.onerror = () => done(0, 0, null);
+    setTimeout(() => done(0, 0, null), 4000);
+    img.src = url;
+  });
 }
 
 function videoMeta(file: File): Promise<{
@@ -155,7 +187,7 @@ function videoMeta(file: File): Promise<{
     const bail = () => {
       resolve({ width: 0, height: 0, durationMs: null, frame: null, revoke: () => URL.revokeObjectURL(url) });
     };
-    const timer = setTimeout(bail, 20000);
+    const timer = setTimeout(bail, 6000);
     video.onerror = () => {
       clearTimeout(timer);
       bail();
@@ -172,7 +204,7 @@ function videoMeta(file: File): Promise<{
           frame: null,
           revoke: () => URL.revokeObjectURL(url),
         });
-      }, 8000);
+      }, 3000);
       video.onseeked = () => {
         clearTimeout(seekTimer);
         resolve({
@@ -245,15 +277,22 @@ export async function uploadPrepared(
   let width = prepared.width;
   let height = prepared.height;
   let durationMs = prepared.durationMs;
+  let thumbBlob: Blob | null = null;
+
+  // 缩略图是锦上添花：限时 8 秒，失败就跳过，绝不让它挡住原图
   try {
-    const thumb = await buildThumb(prepared);
+    const thumb = await withTimeout(buildThumb(prepared), 8000, "生成缩略图");
     width = thumb.width ?? width;
     height = thumb.height ?? height;
     durationMs = thumb.durationMs ?? durationMs;
+    thumbBlob = thumb.blob;
     patch({ width, height, durationMs });
+  } catch {
+    thumbBlob = null;
+  }
 
-    const base = `/api/upload?childId=${childId}&uploadId=${encodeURIComponent(prepared.uploadId)}`;
-
+  const base = `/api/upload?childId=${childId}&uploadId=${encodeURIComponent(prepared.uploadId)}`;
+  try {
     patch({ status: "uploading", progress: 0 });
     await xhrPut(
       `${base}&scope=m`,
@@ -261,9 +300,8 @@ export async function uploadPrepared(
       prepared.file.type || "application/octet-stream",
       (p) => patch({ progress: p }),
     );
-
-    if (thumb.blob) {
-      await xhrPut(`${base}&scope=t`, thumb.blob, "image/jpeg", () => {});
+    if (thumbBlob) {
+      await xhrPut(`${base}&scope=t`, thumbBlob, "image/jpeg", () => {});
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "上传失败";
