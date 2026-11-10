@@ -93,6 +93,7 @@ export type UploadError = Error & { retryable?: boolean };
 
 export class DuplicateUploadError extends Error {
   readonly media: MediaItem;
+  readonly retryable = false;
 
   constructor(media: MediaItem) {
     super("这个文件已经存在，不会重复上传");
@@ -124,7 +125,12 @@ async function findDuplicate(childId: number, contentHash: string, bytes: number
 const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 
 /** 用 XHR 才能拿到真实的上传进度。 */
-function xhrPut(url: string, blob: Blob, contentType: string, onProgress: (p: number) => void): Promise<void> {
+function xhrPut(
+  url: string,
+  blob: Blob,
+  contentType: string,
+  onProgress: (p: number) => void,
+): Promise<{ contentHash?: string }> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url, true);
@@ -134,13 +140,21 @@ function xhrPut(url: string, blob: Blob, contentType: string, onProgress: (p: nu
     };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        resolve();
+        try {
+          resolve(JSON.parse(xhr.responseText || "{}") as { contentHash?: string });
+        } catch {
+          resolve({});
+        }
         return;
       }
       let message = `上传失败（${xhr.status}）`;
       try {
-        const parsed = JSON.parse(xhr.responseText || "{}") as { error?: string };
+        const parsed = JSON.parse(xhr.responseText || "{}") as { error?: string; media?: MediaItem };
         if (parsed.error) message = parsed.error;
+        if (xhr.status === 409 && parsed.media) {
+          reject(new DuplicateUploadError(parsed.media));
+          return;
+        }
       } catch {
         /* 保留默认提示 */
       }
@@ -177,7 +191,7 @@ async function putWithRetry(
   contentType: string,
   onProgress: (p: number) => void,
   onAttempt: (attempt: number) => void,
-): Promise<void> {
+): Promise<{ contentHash?: string }> {
   let lastError: UploadError | null = null;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     if (attempt > 0) {
@@ -186,8 +200,7 @@ async function putWithRetry(
       onProgress(0);
     }
     try {
-      await xhrPut(url, blob, contentType, onProgress);
-      return;
+      return await xhrPut(url, blob, contentType, onProgress);
     } catch (error) {
       lastError = error instanceof Error ? (error as UploadError) : new Error(String(error));
       if (lastError.retryable === false) break;
@@ -395,17 +408,23 @@ export async function uploadPrepared(
   const base = `/api/upload?childId=${childId}&uploadId=${encodeURIComponent(prepared.uploadId)}`;
   try {
     patch({ status: "uploading", progress: 0, attempt: 0 });
-    await putWithRetry(
+    const uploaded = await putWithRetry(
       `${base}&scope=m`,
       prepared.file,
       prepared.file.type || "application/octet-stream",
       (p) => patch({ progress: p }),
       (attempt) => patch({ attempt, progress: 0, status: "uploading" }),
     );
+    contentHash = uploaded.contentHash ?? contentHash;
+    patch({ contentHash });
     if (thumbBlob) {
       await putWithRetry(`${base}&scope=t`, thumbBlob, "image/jpeg", () => {}, () => {});
     }
   } catch (error) {
+    if (error instanceof DuplicateUploadError) {
+      patch({ status: "duplicate", progress: 0, duplicateOf: error.media, error: null });
+      throw error;
+    }
     const message =
       error instanceof Error ? error.message : "上传失败";
     patch({ status: "error", error: `${message}（已自动重试 ${MAX_ATTEMPTS - 1} 次）` });

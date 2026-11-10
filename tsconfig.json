@@ -29,6 +29,9 @@
       "@/platform/storage-impl": [
         "./lib/platform/storage-cf.ts"
       ],
+      "@/platform/content-hash-impl": [
+        "./lib/platform/content-hash-cf.ts"
+      ],
       "@/*": [
         "./*"
       ]

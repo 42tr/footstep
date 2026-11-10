@@ -2,6 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { media, type MediaRow } from "@/db/schema";
 import { getStorage } from "@/lib/platform/storage";
+import { sha256Stream } from "@/lib/content-hash";
 
 const CONTENT_HASH_PATTERN = /^[a-f0-9]{64}$/;
 
@@ -18,13 +19,6 @@ export function findMediaByContentHash(childId: number, contentHash: string): Pr
     .orderBy(media.id)
     .limit(1)
     .get();
-}
-
-async function sha256(body: ReadableStream<Uint8Array>): Promise<string> {
-  // 只有旧记录与新文件大小一致时才会走到这里，避免为了查重读取整个相册。
-  const bytes = await new Response(body).arrayBuffer();
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /**
@@ -51,7 +45,7 @@ export async function findDuplicateMedia(
     try {
       const stored = await getStorage().get(candidate.fileKey);
       if (!stored?.body) continue;
-      const digest = await sha256(stored.body);
+      const digest = await sha256Stream(stored.body);
       try {
         await db
           .update(media)
