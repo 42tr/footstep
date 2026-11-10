@@ -60,7 +60,7 @@ export function Modal({
   const widths = { sm: "max-w-sm", md: "max-w-lg", lg: "max-w-2xl", xl: "max-w-4xl" };
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center">
+    <div className="fixed inset-0 z-[120] flex items-end justify-center sm:items-center">
       <div
         className="animate-ls-fade absolute inset-0 bg-[#3a2c1e]/45 backdrop-blur-[3px]"
         onClick={onClose}
