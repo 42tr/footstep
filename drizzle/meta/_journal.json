@@ -22,6 +22,13 @@
       "when": 1794280923467,
       "tag": "0002_motionless_garia",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794291423568,
+      "tag": "0003_image_content_dedup",
+      "breakpoints": true
     }
   ]
 }
