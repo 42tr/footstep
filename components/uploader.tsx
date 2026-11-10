@@ -28,6 +28,7 @@ const STATUS_LABEL: Record<PreparedFile["status"], string> = {
   uploading: "上传中",
   saving: "保存记录",
   done: "已完成",
+  duplicate: "已存在",
   error: "失败",
 };
 
@@ -44,22 +45,33 @@ const ItemCard = memo(function ItemCard({
 }) {
   const failed = item.status === "error";
   const done = item.status === "done";
-  const locked = done || item.status === "uploading" || item.status === "saving";
+  const duplicate = item.status === "duplicate";
+  const existing = item.duplicateOf;
+  const locked = done || duplicate || item.status === "uploading" || item.status === "saving";
+  const previewUrl = duplicate && existing ? (existing.thumbUrl ?? existing.url) : item.previewUrl;
+  const previewIsImage = item.kind === "photo" || (duplicate && Boolean(existing?.thumbUrl));
   return (
     <li
       className={cn(
         "scrap-card overflow-hidden p-2.5 transition",
         failed && "border-[#e6c3ba] bg-[#fdf3ef]",
         done && "border-sage/50 bg-[#f4f8f3]",
+        duplicate && "border-apricot/60 bg-accent/35",
       )}
     >
       <div className="flex gap-3">
         <div className="relative h-[64px] w-[64px] shrink-0 overflow-hidden rounded-xl bg-cream-deep">
-          {item.kind === "photo" ? (
+          {previewIsImage ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={item.previewUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+            <img
+              src={previewUrl}
+              alt={duplicate ? "已存在的照片" : ""}
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-cover"
+            />
           ) : (
-            <video src={item.previewUrl} className="h-full w-full object-cover" muted preload="metadata" />
+            <video src={previewUrl} className="h-full w-full object-cover" muted preload="metadata" />
           )}
           <span className="absolute bottom-1 left-1 rounded-md bg-[#3a2c1e]/70 px-1.5 py-0.5 text-[10px] text-white">
             {item.kind === "photo" ? <ImageIcon className="h-3 w-3" /> : <Video className="h-3 w-3" />}
@@ -123,7 +135,15 @@ const ItemCard = memo(function ItemCard({
             )}
           </div>
 
-          {item.status !== "pending" && (
+          {duplicate && existing ? (
+            <div className="mt-2 rounded-lg bg-paper/80 px-2.5 py-2 text-[11px] text-ink-soft">
+              <p className="font-medium text-terracotta">已存在，不会重复上传</p>
+              <p className="mt-0.5 truncate">{existing.caption || `已有${existing.kind === "video" ? "视频" : "照片"} · ${existing.takenAt ?? "日期未知"}`}</p>
+              <a href={existing.url} target="_blank" rel="noreferrer" className="mt-1 inline-block font-medium text-ink underline underline-offset-2">
+                查看已有{existing.kind === "video" ? "视频" : "照片"}
+              </a>
+            </div>
+          ) : item.status !== "pending" ? (
             <div className="mt-2">
               <div className="h-1.5 overflow-hidden rounded-full bg-cream-deep">
                 <div
@@ -142,7 +162,7 @@ const ItemCard = memo(function ItemCard({
                     }`}
               </p>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </li>
@@ -253,7 +273,7 @@ export function UploadButton({
     const queue = itemsRef.current.filter((it) => it.status === "pending" || it.status === "error");
     if (!queue.length) return;
     setWorking(true);
-    for (const q of queue) patch(q.uid, { status: "pending", error: null, progress: 0 });
+    for (const q of queue) patch(q.uid, { status: "pending", error: null, progress: 0, duplicateOf: null });
 
     const succeeded: MediaItem[] = [];
     let cursor = 0;
@@ -284,8 +304,9 @@ export function UploadButton({
     const total = items.length;
     const done = items.filter((i) => i.status === "done").length;
     const failed = items.filter((i) => i.status === "error").length;
+    const duplicate = items.filter((i) => i.status === "duplicate").length;
     const active = items.filter((i) => i.status === "uploading" || i.status === "saving" || i.status === "preparing").length;
-    return { total, done, failed, active };
+    return { total, done, failed, duplicate, active };
   }, [items]);
 
   const visible = items.slice(0, RENDER_CAP);
@@ -311,7 +332,7 @@ export function UploadButton({
         title="上传照片和视频"
         subtitle={
           stats.total
-            ? `共 ${stats.total} 个 · 完成 ${stats.done}${stats.failed ? ` · 失败 ${stats.failed}` : ""}${
+            ? `共 ${stats.total} 个 · 完成 ${stats.done}${stats.duplicate ? ` · 重复 ${stats.duplicate}` : ""}${stats.failed ? ` · 失败 ${stats.failed}` : ""}${
                 working ? ` · 正在传 ${stats.active}` : ""
               }`
             : "原图完整保存；缩略图在你的浏览器里生成，不占服务器算力"
@@ -321,23 +342,23 @@ export function UploadButton({
             <p className="text-[12px] text-ink-soft">
               {working ? (
                 <span className="tabular-nums">
-                  {stats.done + stats.failed} / {stats.total} · 同时传 {Math.min(CONCURRENCY, stats.total)} 路
+                  {stats.done + stats.duplicate + stats.failed} / {stats.total} · 同时传 {Math.min(CONCURRENCY, stats.total)} 路
                 </span>
               ) : (
                 `单个文件上限 ${MAX_MB}MB`
               )}
             </p>
             <div className="flex gap-2">
-              {stats.done > 0 && !working && (
+              {(stats.done > 0 || stats.duplicate > 0) && !working && (
                 <Btn variant="outline" size="sm" onClick={reset}>
                   清空列表
                 </Btn>
               )}
               <Btn variant="ghost" size="sm" onClick={close} disabled={working}>
-                {stats.done > 0 ? "完成" : "取消"}
+                {stats.done > 0 || stats.duplicate > 0 ? "完成" : "取消"}
               </Btn>
               <Btn size="sm" onClick={start} disabled={working || pendingCount === 0}>
-                {working ? `上传中 ${stats.done + stats.failed}/${stats.total}` : `开始上传（${pendingCount}）`}
+                {working ? `上传中 ${stats.done + stats.duplicate + stats.failed}/${stats.total}` : `开始上传（${pendingCount}）`}
               </Btn>
             </div>
           </div>

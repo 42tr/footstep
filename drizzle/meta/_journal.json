@@ -15,6 +15,13 @@
       "when": 1793600337007,
       "tag": "0001_smiling_hawkeye",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794280923467,
+      "tag": "0002_motionless_garia",
+      "breakpoints": true
     }
   ]
 }

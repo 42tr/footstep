@@ -3,7 +3,7 @@ import type { MediaItem } from "@/lib/types";
 export const MAX_UPLOAD_BYTES = 90 * 1024 * 1024;
 const THUMB_MAX = 720;
 
-export type UploadStatus = "pending" | "preparing" | "uploading" | "saving" | "done" | "error";
+export type UploadStatus = "pending" | "preparing" | "uploading" | "saving" | "done" | "duplicate" | "error";
 
 export type PreparedFile = {
   uid: string;
@@ -23,6 +23,8 @@ export type PreparedFile = {
   caption: string;
   album: string;
   media: MediaItem | null;
+  contentHash: string | null;
+  duplicateOf: MediaItem | null;
 };
 
 export function toYmdLocal(d: Date): string {
@@ -82,10 +84,42 @@ export function prepareFile(file: File, album = ""): PreparedFile | null {
     caption: "",
     album,
     media: null,
+    contentHash: null,
+    duplicateOf: null,
   };
 }
 
 export type UploadError = Error & { retryable?: boolean };
+
+export class DuplicateUploadError extends Error {
+  readonly media: MediaItem;
+
+  constructor(media: MediaItem) {
+    super("这个文件已经存在，不会重复上传");
+    this.name = "DuplicateUploadError";
+    this.media = media;
+  }
+}
+
+async function sha256File(file: File): Promise<string> {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error("当前浏览器无法计算文件摘要，请通过 HTTPS 访问或更换浏览器");
+  }
+  const bytes = await file.arrayBuffer();
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function findDuplicate(childId: number, contentHash: string, bytes: number): Promise<MediaItem | null> {
+  const response = await fetch("/api/media/duplicate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ childId, contentHash, bytes }),
+  });
+  const body = (await response.json().catch(() => ({}))) as { media?: MediaItem | null; error?: string };
+  if (!response.ok) throw new Error(body.error ?? `查重失败（${response.status}）`);
+  return body.media ?? null;
+}
 
 const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 
@@ -324,7 +358,23 @@ export async function uploadPrepared(
     throw new Error(message);
   }
 
-  patch({ status: "preparing" });
+  patch({ status: "preparing", error: null, duplicateOf: null });
+  let contentHash = prepared.contentHash;
+  try {
+    contentHash ??= await sha256File(prepared.file);
+    patch({ contentHash });
+    const duplicate = await findDuplicate(childId, contentHash, prepared.file.size);
+    if (duplicate) {
+      patch({ status: "duplicate", progress: 0, duplicateOf: duplicate });
+      throw new DuplicateUploadError(duplicate);
+    }
+  } catch (error) {
+    if (error instanceof DuplicateUploadError) throw error;
+    const message = error instanceof Error ? error.message : "文件查重失败";
+    patch({ status: "error", error: message });
+    throw error instanceof Error ? error : new Error(message);
+  }
+
   let width = prepared.width;
   let height = prepared.height;
   let durationMs = prepared.durationMs;
@@ -377,11 +427,16 @@ export async function uploadPrepared(
       takenAt: prepared.takenAt,
       caption: prepared.caption,
       album: prepared.album,
+      contentHash,
     }),
   });
 
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    const body = (await res.json().catch(() => ({}))) as { error?: string; media?: MediaItem };
+    if (res.status === 409 && body.media) {
+      patch({ status: "duplicate", progress: 0, duplicateOf: body.media, error: null });
+      throw new DuplicateUploadError(body.media);
+    }
     const message = body.error ?? `保存失败（${res.status}）`;
     patch({ status: "error", error: message });
     throw new Error(message);

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /** 孩子档案。支持多娃，头部可切换。 */
 export const children = sqliteTable("children", {
@@ -30,6 +30,8 @@ export const media = sqliteTable(
     thumbKey: text("thumb_key"),
     mime: text("mime").notNull().default(""),
     bytes: integer("bytes").notNull().default(0),
+    /** 原始文件内容的 SHA-256；旧数据在查重时按需补算。 */
+    contentHash: text("content_hash"),
     width: integer("width"),
     height: integer("height"),
     durationMs: integer("duration_ms"),
@@ -40,7 +42,11 @@ export const media = sqliteTable(
     uploadedBy: text("uploaded_by").notNull().default(""),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
-  (t) => [index("media_child_idx").on(t.childId), index("media_taken_idx").on(t.takenAt)],
+  (t) => [
+    index("media_child_idx").on(t.childId),
+    index("media_taken_idx").on(t.takenAt),
+    uniqueIndex("media_child_content_hash_idx").on(t.childId, t.contentHash),
+  ],
 );
 
 /** 成长时间线上的一条记录。 */

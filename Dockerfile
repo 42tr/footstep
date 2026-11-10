@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # 构建层直接使用仓库里已装好的 node_modules，构建过程零网络请求，
 # 避免容器内访问 npm 源不稳定；运行时层只保留 standalone 产物。
-FROM node:22-bookworm-slim AS build
+FROM node:24-bookworm-slim AS build
 WORKDIR /app
 ENV LS_TARGET=node NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
@@ -9,7 +9,7 @@ COPY node_modules ./node_modules
 COPY . .
 RUN npm run build:node
 
-FROM node:22-bookworm-slim AS run
+FROM node:24-bookworm-slim AS run
 WORKDIR /app
 ENV LS_TARGET=node NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3100 \
     LS_DB_PATH=/data/app.db LS_FILES_PATH=/data/files \

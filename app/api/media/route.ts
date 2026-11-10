@@ -1,9 +1,10 @@
 import { denyIfAnonymous } from "@/lib/platform/guard";
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { children, media } from "@/db/schema";
+import { children, media, type MediaRow } from "@/db/schema";
 import { badRequest, clampNumber, clampString, serverError } from "@/lib/api";
 import { getActor } from "@/lib/identity";
+import { findMediaByContentHash, readContentHash } from "@/lib/media-dedup";
 import { mediaKey, thumbKey } from "@/lib/r2";
 import { getStorage } from "@/lib/platform/storage";
 import { isValidYmd, todayYmd } from "@/lib/time";
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
   }
 }
 
-/** 文件已经流式传到 R2，这里只落库元数据。 */
+/** 文件已经流式传到对象存储，这里只落库元数据。 */
 export async function POST(request: Request) {
   const denied = await denyIfAnonymous();
   if (denied) return denied;
@@ -41,9 +42,11 @@ export async function POST(request: Request) {
     const childId = Number(payload.childId);
     const uploadId = clampString(payload.uploadId, 64);
     const kind = payload.kind === "video" ? "video" : "photo";
+    const contentHash = readContentHash(payload.contentHash);
 
     if (!Number.isInteger(childId) || childId <= 0) return badRequest("childId 不合法");
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(uploadId)) return badRequest("uploadId 不合法");
+    if (!contentHash) return badRequest("文件内容摘要缺失，请刷新页面后重试");
 
     const db = getDb();
     const child = await db.select({ id: children.id }).from(children).where(eq(children.id, childId)).get();
@@ -61,26 +64,37 @@ export async function POST(request: Request) {
     const takenAt = isValidYmd(takenAtRaw) ? takenAtRaw : todayYmd();
     const actor = await getActor();
 
-    const [row] = await db
-      .insert(media)
-      .values({
-        childId,
-        kind,
-        fileKey,
-        thumbKey: thumb ? tKey : null,
-        mime: clampString(payload.mime, 120) || stored.contentType || "",
-        bytes: stored.size,
-        width: clampNumber(payload.width, 1, 20000),
-        height: clampNumber(payload.height, 1, 20000),
-        durationMs: kind === "video" ? clampNumber(payload.durationMs, 0, 86400000) : null,
-        takenAt,
-        caption: clampString(payload.caption, 500),
-        album: clampString(payload.album, 60),
-        favorite: payload.favorite === true,
-        uploadedBy: actor.label,
-      })
-      .returning();
+    let row: MediaRow | undefined;
+    try {
+      [row] = await db
+        .insert(media)
+        .values({
+          childId,
+          kind,
+          fileKey,
+          thumbKey: thumb ? tKey : null,
+          mime: clampString(payload.mime, 120) || stored.contentType || "",
+          bytes: stored.size,
+          contentHash,
+          width: clampNumber(payload.width, 1, 20000),
+          height: clampNumber(payload.height, 1, 20000),
+          durationMs: kind === "video" ? clampNumber(payload.durationMs, 0, 86400000) : null,
+          takenAt,
+          caption: clampString(payload.caption, 500),
+          album: clampString(payload.album, 60),
+          favorite: payload.favorite === true,
+          uploadedBy: actor.label,
+        })
+        .returning();
+    } catch (error) {
+      // 两个相同文件同时通过上传前检查时，由唯一索引保证只保留一条记录。
+      const duplicate = await findMediaByContentHash(childId, contentHash);
+      if (!duplicate) throw error;
+      await Promise.allSettled([storage.delete(fileKey), storage.delete(tKey)]);
+      return Response.json({ error: "这个文件已经存在，不会重复保存", media: serializeMedia(duplicate) }, { status: 409 });
+    }
 
+    if (!row) throw new Error("媒体记录保存失败");
     return Response.json({ media: serializeMedia(row) }, { status: 201 });
   } catch (error) {
     return serverError(error);
