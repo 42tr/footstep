@@ -6,6 +6,7 @@ import { children } from "@/db/schema";
 import { avatarKey, MAX_UPLOAD_BYTES, mediaKey, thumbKey } from "@/lib/r2";
 import { getStorage } from "@/lib/platform/storage";
 import { sha256Stream } from "@/lib/content-hash";
+import { imageHashStream } from "@/lib/image-hash";
 import { findDuplicateMedia } from "@/lib/media-dedup";
 import { serializeMedia } from "@/lib/serialize";
 
@@ -57,13 +58,18 @@ export async function POST(request: Request) {
     await storage.put(key, request.body, contentType);
 
     let contentHash: string | undefined;
+    let imageHash: string | undefined;
     if (scope === "m") {
       // 不信任浏览器上报的摘要：按实际收到的文件内容再做一次服务端去重。
       const stored = await storage.get(key);
       if (!stored?.body) throw new Error("上传文件读取失败");
       const digest = await sha256Stream(stored.body);
       contentHash = digest;
-      const duplicate = await findDuplicateMedia(childId, digest, stored.size);
+      if (contentType.startsWith("image/")) {
+        const imageStored = await storage.get(key);
+        if (imageStored?.body) imageHash = (await imageHashStream(imageStored.body)) ?? undefined;
+      }
+      const duplicate = await findDuplicateMedia(childId, digest, stored.size, imageHash);
       if (duplicate) {
         // uploadId 相同说明是重试，不能误删已有记录正在引用的原文件。
         if (duplicate.fileKey !== key) await storage.delete(key);
@@ -74,7 +80,7 @@ export async function POST(request: Request) {
       }
     }
 
-    return Response.json({ key, uploadId, contentHash });
+    return Response.json({ key, uploadId, contentHash, imageHash });
   } catch (error) {
     return serverError(error);
   }

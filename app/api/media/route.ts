@@ -4,7 +4,7 @@ import { getDb } from "@/db";
 import { children, media, type MediaRow } from "@/db/schema";
 import { badRequest, clampNumber, clampString, serverError } from "@/lib/api";
 import { getActor } from "@/lib/identity";
-import { findMediaByContentHash, readContentHash } from "@/lib/media-dedup";
+import { findMediaByContentHash, findMediaByImageHash, readContentHash } from "@/lib/media-dedup";
 import { mediaKey, thumbKey } from "@/lib/r2";
 import { getStorage } from "@/lib/platform/storage";
 import { isValidYmd, todayYmd } from "@/lib/time";
@@ -43,6 +43,7 @@ export async function POST(request: Request) {
     const uploadId = clampString(payload.uploadId, 64);
     const kind = payload.kind === "video" ? "video" : "photo";
     const contentHash = readContentHash(payload.contentHash);
+    const imageHash = kind === "photo" ? readContentHash(payload.imageHash) : null;
 
     if (!Number.isInteger(childId) || childId <= 0) return badRequest("childId 不合法");
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(uploadId)) return badRequest("uploadId 不合法");
@@ -76,6 +77,7 @@ export async function POST(request: Request) {
           mime: clampString(payload.mime, 120) || stored.contentType || "",
           bytes: stored.size,
           contentHash,
+          imageHash,
           width: clampNumber(payload.width, 1, 20000),
           height: clampNumber(payload.height, 1, 20000),
           durationMs: kind === "video" ? clampNumber(payload.durationMs, 0, 86400000) : null,
@@ -88,7 +90,9 @@ export async function POST(request: Request) {
         .returning();
     } catch (error) {
       // 两个相同文件同时通过上传前检查时，由唯一索引保证只保留一条记录。
-      const duplicate = await findMediaByContentHash(childId, contentHash);
+      const duplicate = imageHash
+        ? (await findMediaByImageHash(childId, imageHash)) ?? (await findMediaByContentHash(childId, contentHash))
+        : await findMediaByContentHash(childId, contentHash);
       if (!duplicate) throw error;
       await Promise.allSettled([storage.delete(fileKey), storage.delete(tKey)]);
       return Response.json({ error: "这个文件已经存在，不会重复保存", media: serializeMedia(duplicate) }, { status: 409 });

@@ -32,6 +32,8 @@ export const media = sqliteTable(
     bytes: integer("bytes").notNull().default(0),
     /** 原始文件内容的 SHA-256；旧数据在查重时按需补算。 */
     contentHash: text("content_hash"),
+    /** 照片方向归一化后的像素 SHA-256，避免 EXIF 变化绕过查重。 */
+    imageHash: text("image_hash"),
     width: integer("width"),
     height: integer("height"),
     durationMs: integer("duration_ms"),
@@ -46,6 +48,7 @@ export const media = sqliteTable(
     index("media_child_idx").on(t.childId),
     index("media_taken_idx").on(t.takenAt),
     uniqueIndex("media_child_content_hash_idx").on(t.childId, t.contentHash),
+    uniqueIndex("media_child_image_hash_idx").on(t.childId, t.imageHash),
   ],
 );
 

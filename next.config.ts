@@ -7,6 +7,7 @@ const isNodeTarget = process.env.LS_TARGET === "node";
 const dbImpl = isNodeTarget ? "./lib/platform/db-node.ts" : "./lib/platform/db-cf.ts";
 const storageImpl = isNodeTarget ? "./lib/platform/storage-node.ts" : "./lib/platform/storage-cf.ts";
 const contentHashImpl = isNodeTarget ? "./lib/platform/content-hash-node.ts" : "./lib/platform/content-hash-cf.ts";
+const imageHashImpl = isNodeTarget ? "./lib/platform/image-hash-node.ts" : "./lib/platform/image-hash-cf.ts";
 
 const nextConfig: NextConfig = {
   ...(isNodeTarget ? { output: "standalone" as const } : {}),
@@ -15,6 +16,7 @@ const nextConfig: NextConfig = {
       "@/platform/db-impl": dbImpl,
       "@/platform/storage-impl": storageImpl,
       "@/platform/content-hash-impl": contentHashImpl,
+      "@/platform/image-hash-impl": imageHashImpl,
     },
   },
   webpack: (config) => {
@@ -24,6 +26,10 @@ const nextConfig: NextConfig = {
       "@/platform/content-hash-impl": path.resolve(
         process.cwd(),
         isNodeTarget ? "lib/platform/content-hash-node.ts" : "lib/platform/content-hash-cf.ts",
+      ),
+      "@/platform/image-hash-impl": path.resolve(
+        process.cwd(),
+        isNodeTarget ? "lib/platform/image-hash-node.ts" : "lib/platform/image-hash-cf.ts",
       ),
       "@/platform/storage-impl": path.resolve(
         process.cwd(),

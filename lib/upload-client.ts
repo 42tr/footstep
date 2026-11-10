@@ -130,7 +130,7 @@ function xhrPut(
   blob: Blob,
   contentType: string,
   onProgress: (p: number) => void,
-): Promise<{ contentHash?: string }> {
+): Promise<{ contentHash?: string; imageHash?: string }> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url, true);
@@ -141,7 +141,7 @@ function xhrPut(
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
-          resolve(JSON.parse(xhr.responseText || "{}") as { contentHash?: string });
+          resolve(JSON.parse(xhr.responseText || "{}") as { contentHash?: string; imageHash?: string });
         } catch {
           resolve({});
         }
@@ -191,7 +191,7 @@ async function putWithRetry(
   contentType: string,
   onProgress: (p: number) => void,
   onAttempt: (attempt: number) => void,
-): Promise<{ contentHash?: string }> {
+): Promise<{ contentHash?: string; imageHash?: string }> {
   let lastError: UploadError | null = null;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     if (attempt > 0) {
@@ -373,6 +373,7 @@ export async function uploadPrepared(
 
   patch({ status: "preparing", error: null, duplicateOf: null });
   let contentHash = prepared.contentHash;
+  let imageHash: string | undefined;
   try {
     contentHash ??= await sha256File(prepared.file);
     patch({ contentHash });
@@ -416,6 +417,7 @@ export async function uploadPrepared(
       (attempt) => patch({ attempt, progress: 0, status: "uploading" }),
     );
     contentHash = uploaded.contentHash ?? contentHash;
+    imageHash = uploaded.imageHash;
     patch({ contentHash });
     if (thumbBlob) {
       await putWithRetry(`${base}&scope=t`, thumbBlob, "image/jpeg", () => {}, () => {});
@@ -447,6 +449,7 @@ export async function uploadPrepared(
       caption: prepared.caption,
       album: prepared.album,
       contentHash,
+      imageHash,
     }),
   });
 
