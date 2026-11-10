@@ -32,6 +32,9 @@
       "@/platform/content-hash-impl": [
         "./lib/platform/content-hash-cf.ts"
       ],
+      "@/platform/image-hash-impl": [
+        "./lib/platform/image-hash-cf.ts"
+      ],
       "@/*": [
         "./*"
       ]
