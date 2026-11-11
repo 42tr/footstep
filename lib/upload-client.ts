@@ -1,6 +1,7 @@
 import type { MediaItem } from "@/lib/types";
 
-export const MAX_UPLOAD_BYTES = 90 * 1024 * 1024;
+/** 前端预检上限；服务端会按平台再校验一次（Cloudflare 上限 90MB，自托管 1GB）。 */
+export const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 const THUMB_MAX = 720;
 
 export type UploadStatus = "pending" | "preparing" | "uploading" | "saving" | "done" | "duplicate" | "error";

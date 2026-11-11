@@ -11,5 +11,6 @@ export function avatarKey(childId: number, id: string): string {
   return `a/${childId}/${id}.jpg`;
 }
 
-/** Worker 单次请求体上限约 100MB，留出余量；自托管版本沿用同一上限。 */
-export const MAX_UPLOAD_BYTES = 90 * 1024 * 1024;
+/** 自托管（LS_TARGET=node）上限 1GB；Cloudflare Worker 单次请求体上限约 100MB，沿用 90MB 余量。 */
+export const MAX_UPLOAD_BYTES =
+  process.env.LS_TARGET === "node" ? 1024 * 1024 * 1024 : 90 * 1024 * 1024;
