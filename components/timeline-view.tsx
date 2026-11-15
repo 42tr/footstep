@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, ScrollText, Trash2 } from "lucide-react";
+import { Pencil, Play, Plus, ScrollText, Trash2 } from "lucide-react";
 import { EmptyState, PageHeader } from "@/components/common";
 import { Btn } from "@/components/controls";
 import { ConfirmDialog } from "@/components/modal";
@@ -325,11 +325,19 @@ function MomentCard({
                 attached.length === 1 && "col-span-2 aspect-[4/3] sm:col-span-2",
               )}
             >
-              {item.kind === "video" ? (
-                <video src={item.thumbUrl ?? item.url} muted preload="metadata" className="h-full w-full object-cover" />
+              {item.kind === "video" && !item.thumbUrl ? (
+                // 老视频可能没有缩略图，跳转到首帧附近，避免只加载元数据时黑屏。
+                <video src={`${item.url}#t=0.1`} muted playsInline preload="metadata" className="h-full w-full object-cover" />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={item.thumbUrl ?? item.url} alt="" loading="lazy" className="h-full w-full object-cover" />
+              )}
+              {item.kind === "video" && (
+                <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#2b2015]/45 text-white backdrop-blur-[2px]">
+                    <Play className="ml-0.5 h-4 w-4 fill-current" />
+                  </span>
+                </span>
               )}
               {i === 7 && attached.length > 8 && (
                 <span className="absolute inset-0 flex items-center justify-center bg-[#2b2015]/55 text-sm font-medium text-white">

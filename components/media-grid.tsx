@@ -43,6 +43,20 @@ export function MediaTile({
           <Play className="h-6 w-6" />
           <span className="text-[11px]">{(item.mime || "文件").toUpperCase()}</span>
         </span>
+      ) : item.kind === "video" && !item.thumbUrl ? (
+        // 老视频没有图片封面时显示首帧，不要把视频地址交给 img。
+        <video
+          src={`${item.url}#t=0.1`}
+          muted
+          playsInline
+          preload="metadata"
+          onLoadedData={() => setLoaded(true)}
+          onError={() => setLoaded(true)}
+          className={cn(
+            "h-full w-full object-cover transition-[opacity,transform] duration-300 group-hover:scale-[1.04]",
+            loaded ? "opacity-100" : "opacity-0",
+          )}
+        />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
