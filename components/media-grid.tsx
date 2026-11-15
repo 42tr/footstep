@@ -5,6 +5,7 @@ import { Heart, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/time";
 import type { MediaItem } from "@/lib/types";
+import { VideoThumbnail } from "@/components/video-thumbnail";
 
 /** HEIC/HEIF 浏览器普遍不能直接显示，没有缩略图时给个占位。 */
 function needsPlaceholder(item: MediaItem) {
@@ -44,18 +45,10 @@ export function MediaTile({
           <span className="text-[11px]">{(item.mime || "文件").toUpperCase()}</span>
         </span>
       ) : item.kind === "video" && !item.thumbUrl ? (
-        // 老视频没有图片封面时显示首帧，不要把视频地址交给 img。
-        <video
-          src={`${item.url}#t=0.1`}
-          muted
-          playsInline
-          preload="metadata"
-          onLoadedData={() => setLoaded(true)}
-          onError={() => setLoaded(true)}
-          className={cn(
-            "h-full w-full object-cover transition-[opacity,transform] duration-300 group-hover:scale-[1.04]",
-            loaded ? "opacity-100" : "opacity-0",
-          )}
+        <VideoThumbnail
+          src={item.url}
+          durationMs={item.durationMs}
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
         />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element

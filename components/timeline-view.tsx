@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/modal";
 import { Lightbox } from "@/components/lightbox";
 import { MomentDialog } from "@/components/moment-dialog";
 import { UploadButton } from "@/components/uploader";
+import { VideoThumbnail } from "@/components/video-thumbnail";
 import { cn } from "@/lib/utils";
 import { categoryStyle } from "@/lib/ui-tokens";
 import { computeAge, formatAge, formatYmdCn, monthGroupLabel, weekdayCn } from "@/lib/time";
@@ -326,8 +327,7 @@ function MomentCard({
               )}
             >
               {item.kind === "video" && !item.thumbUrl ? (
-                // 老视频可能没有缩略图，跳转到首帧附近，避免只加载元数据时黑屏。
-                <video src={`${item.url}#t=0.1`} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                <VideoThumbnail src={item.url} durationMs={item.durationMs} className="h-full w-full object-cover" />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={item.thumbUrl ?? item.url} alt="" loading="lazy" className="h-full w-full object-cover" />
