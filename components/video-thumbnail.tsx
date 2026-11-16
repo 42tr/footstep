@@ -5,22 +5,14 @@ import { cn } from "@/lib/utils";
 
 const MAX_BLACK_FRAME_SEEKS = 10;
 
-function readFrame(video: HTMLVideoElement) {
-  const canvas = document.createElement("canvas");
-  const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight));
-  canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-  canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("Canvas is unavailable");
-  context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
+function measureBrightness(source: CanvasImageSource) {
   // 只读取缩小后的像素，避免每次取帧都扫描整张高清封面。
   const sampleCanvas = document.createElement("canvas");
   sampleCanvas.width = 32;
   sampleCanvas.height = 32;
   const sampleContext = sampleCanvas.getContext("2d", { willReadFrequently: true });
   if (!sampleContext) throw new Error("Canvas is unavailable");
-  sampleContext.drawImage(video, 0, 0, 32, 32);
+  sampleContext.drawImage(source, 0, 0, 32, 32);
   const pixels = sampleContext.getImageData(0, 0, 32, 32).data;
   let luminanceTotal = 0;
   let nearBlackPixels = 0;
@@ -32,16 +24,31 @@ function readFrame(video: HTMLVideoElement) {
   const brightness = luminanceTotal / (pixels.length / 4);
   const isBlack = brightness < 18 && nearBlackPixels / (pixels.length / 4) > 0.95;
 
+  return { brightness, isBlack };
+}
+
+function readFrame(video: HTMLVideoElement) {
+  const canvas = document.createElement("canvas");
+  const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight));
+  canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+  canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas is unavailable");
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const { brightness, isBlack } = measureBrightness(video);
+
   return { dataUrl: canvas.toDataURL("image/jpeg", 0.82), brightness, isBlack };
 }
 
 /** 从开头向后取帧，跳过视频开头的黑场。 */
 export function VideoThumbnail({
   src,
+  posterSrc,
   durationMs,
   className,
 }: {
   src: string;
+  posterSrc?: string | null;
   durationMs: number | null;
   className?: string;
 }) {
@@ -50,7 +57,20 @@ export function VideoThumbnail({
   const seekCountRef = useRef(0);
   const brightestFrameRef = useRef<{ dataUrl: string; brightness: number } | null>(null);
   const [poster, setPoster] = useState<string | null>(null);
+  const [posterRejected, setPosterRejected] = useState(false);
   const [failed, setFailed] = useState(false);
+
+  function inspectExistingPoster(image: HTMLImageElement) {
+    if (!posterSrc) return;
+    try {
+      // 老视频可能已保存了黑色首帧；这种封面不能直接展示，需从原视频重取。
+      if (measureBrightness(image).isBlack) setPosterRejected(true);
+      else setPoster(posterSrc);
+    } catch {
+      // 像素读取不可用时仍保留服务端封面，不影响正常展示。
+      setPoster(posterSrc);
+    }
+  }
 
   function captureFrame() {
     const video = videoRef.current;
@@ -108,7 +128,18 @@ export function VideoThumbnail({
       ) : (
         <span className={cn("block bg-cream-deep", className)} aria-hidden="true" />
       )}
-      {!poster && !failed && (
+      {posterSrc && !poster && !posterRejected && (
+        // 仅用于检测旧封面，不先把可能为黑色的图片展示出来。
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={posterSrc}
+          alt=""
+          className="hidden"
+          onLoad={(event) => inspectExistingPoster(event.currentTarget)}
+          onError={() => setPosterRejected(true)}
+        />
+      )}
+      {(!posterSrc || posterRejected) && !poster && !failed && (
         <video
           ref={videoRef}
           src={src}

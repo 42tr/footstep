@@ -326,8 +326,8 @@ function MomentCard({
                 attached.length === 1 && "col-span-2 aspect-[4/3] sm:col-span-2",
               )}
             >
-              {item.kind === "video" && !item.thumbUrl ? (
-                <VideoThumbnail src={item.url} durationMs={item.durationMs} className="h-full w-full object-cover" />
+              {item.kind === "video" ? (
+                <VideoThumbnail src={item.url} posterSrc={item.thumbUrl} durationMs={item.durationMs} className="h-full w-full object-cover" />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={item.thumbUrl ?? item.url} alt="" loading="lazy" className="h-full w-full object-cover" />

@@ -44,9 +44,10 @@ export function MediaTile({
           <Play className="h-6 w-6" />
           <span className="text-[11px]">{(item.mime || "文件").toUpperCase()}</span>
         </span>
-      ) : item.kind === "video" && !item.thumbUrl ? (
+      ) : item.kind === "video" ? (
         <VideoThumbnail
           src={item.url}
+          posterSrc={item.thumbUrl}
           durationMs={item.durationMs}
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
         />

@@ -29,7 +29,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ key: string
     const headers = new Headers();
     if (object.contentType) headers.set("content-type", object.contentType);
     headers.set("accept-ranges", "bytes");
-    headers.set("cache-control", "private, max-age=31536000, immutable");
+    headers.set(
+      "cache-control",
+      key.startsWith("t/") ? "private, no-cache" : "private, max-age=31536000, immutable",
+    );
     headers.set("x-content-type-options", "nosniff");
 
     if (object.range) {
