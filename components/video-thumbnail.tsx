@@ -58,6 +58,7 @@ export function VideoThumbnail({
   const brightestFrameRef = useRef<{ dataUrl: string; brightness: number } | null>(null);
   const [poster, setPoster] = useState<string | null>(null);
   const [posterRejected, setPosterRejected] = useState(false);
+  const [posterLoadFailed, setPosterLoadFailed] = useState(false);
   const [failed, setFailed] = useState(false);
 
   function inspectExistingPoster(image: HTMLImageElement) {
@@ -65,7 +66,6 @@ export function VideoThumbnail({
     try {
       // 老视频可能已保存了黑色首帧；这种封面不能直接展示，需从原视频重取。
       if (measureBrightness(image).isBlack) setPosterRejected(true);
-      else setPoster(posterSrc);
     } catch {
       // 像素读取不可用时仍保留服务端封面，不影响正常展示。
       setPoster(posterSrc);
@@ -125,21 +125,20 @@ export function VideoThumbnail({
       {poster ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={poster} alt="" className={className} />
-      ) : (
-        <span className={cn("block bg-cream-deep", className)} aria-hidden="true" />
-      )}
-      {posterSrc && !poster && !posterRejected && (
-        // 仅用于检测旧封面，不先把可能为黑色的图片展示出来。
+      ) : posterSrc && !posterLoadFailed ? (
+        // 先显示服务端封面，黑帧检测和新帧生成都不能让它变成空白。
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={posterSrc}
           alt=""
-          className="hidden"
+          className={className}
           onLoad={(event) => inspectExistingPoster(event.currentTarget)}
-          onError={() => setPosterRejected(true)}
+          onError={() => setPosterLoadFailed(true)}
         />
+      ) : (
+        <span className={cn("block bg-cream-deep", className)} aria-hidden="true" />
       )}
-      {(!posterSrc || posterRejected) && !poster && !failed && (
+      {(!posterSrc || posterRejected || posterLoadFailed) && !failed && (
         <video
           ref={videoRef}
           src={src}
