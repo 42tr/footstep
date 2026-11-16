@@ -121,13 +121,13 @@ export function relativeDayCn(ymd: string | null | undefined): string {
   return formatYmdCn(ymd);
 }
 
-/** 按月龄分组用的标签，例如 2024年3月 · 10个月大 */
-export function monthGroupLabel(ymd: string, birthYmd: string | null): string {
+/** 按日期分组用的标签，例如 2024年3月15日 · 10个月3天大 */
+export function dayGroupLabel(ymd: string, birthYmd: string | null): string {
   const d = parseYmd(ymd);
   if (!d) return "未知时间";
-  const base = `${d.getUTCFullYear()}年${d.getUTCMonth() + 1}月`;
+  const base = formatYmdCn(ymd);
   if (!birthYmd) return base;
-  const age = computeAge(birthYmd, toYmd(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 15))));
+  const age = computeAge(birthYmd, ymd);
   if (!age) return base;
   if (age.years <= 0 && age.months <= 0) return `${base} · 刚出生`;
   return `${base} · ${formatAge(age)}大`;

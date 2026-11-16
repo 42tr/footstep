@@ -12,7 +12,7 @@ import { UploadButton } from "@/components/uploader";
 import { VideoThumbnail } from "@/components/video-thumbnail";
 import { cn } from "@/lib/utils";
 import { categoryStyle } from "@/lib/ui-tokens";
-import { computeAge, formatAge, formatYmdCn, monthGroupLabel, weekdayCn } from "@/lib/time";
+import { computeAge, dayGroupLabel, formatAge, formatYmdCn, weekdayCn } from "@/lib/time";
 import type { Child, MediaItem, MomentItem } from "@/lib/types";
 
 type CategoryFilter = "all" | "daily" | "first" | "health" | "travel" | "funny" | "family";
@@ -46,7 +46,7 @@ export function TimelineView({
   const groups = useMemo(() => {
     const map = new Map<string, MomentItem[]>();
     for (const m of filtered) {
-      const key = m.happenedOn.slice(0, 7);
+      const key = m.happenedOn;
       const list = map.get(key);
       if (list) list.push(m);
       else map.set(key, [m]);
@@ -55,7 +55,7 @@ export function TimelineView({
       .sort((a, b) => b[0].localeCompare(a[0]))
       .map(([key, list]) => ({
         key,
-        label: monthGroupLabel(`${key}-15`, child.birthDate),
+        label: dayGroupLabel(key, child.birthDate),
         items: list,
       }));
   }, [filtered, child.birthDate]);

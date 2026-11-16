@@ -8,7 +8,7 @@ import { Lightbox } from "@/components/lightbox";
 import { MediaGrid } from "@/components/media-grid";
 import { UploadButton } from "@/components/uploader";
 import { cn } from "@/lib/utils";
-import { formatBytes, monthGroupLabel } from "@/lib/time";
+import { dayGroupLabel, formatBytes } from "@/lib/time";
 import type { Child, MediaItem } from "@/lib/types";
 
 type Filter = "all" | "photo" | "video" | "favorite";
@@ -44,7 +44,7 @@ export function GalleryView({ child, media: initial }: { child: Child; media: Me
   const groups = useMemo<Group[]>(() => {
     const map = new Map<string, MediaItem[]>();
     for (const item of filtered) {
-      const key = (item.takenAt ?? "unknown").slice(0, 7);
+      const key = item.takenAt ?? "unknown";
       const list = map.get(key);
       if (list) list.push(item);
       else map.set(key, [item]);
@@ -53,7 +53,7 @@ export function GalleryView({ child, media: initial }: { child: Child; media: Me
       .sort((a, b) => (a[0] === "unknown" ? 1 : b[0] === "unknown" ? -1 : b[0].localeCompare(a[0])))
       .map(([key, list]) => ({
         key,
-        label: key === "unknown" ? "没有日期" : monthGroupLabel(`${key}-15`, child.birthDate),
+        label: key === "unknown" ? "没有日期" : dayGroupLabel(key, child.birthDate),
         items: list,
       }));
   }, [filtered, child.birthDate]);
@@ -163,7 +163,7 @@ export function GalleryView({ child, media: initial }: { child: Child; media: Me
           <EmptyState
             emoji="🖼️"
             title="相册还空着"
-            hint="把手机里的照片和视频传上来，它们会自动按月份和月龄排好。"
+            hint="把手机里的照片和视频传上来，它们会自动按日期和月龄排好。"
             action={
               <UploadButton
                 childId={child.id}
